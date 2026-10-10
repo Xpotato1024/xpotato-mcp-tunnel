@@ -1,0 +1,12 @@
+{
+  "name": "xpotato-mcp-tunnel",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Windows Desktop Commander and Secure MCP Tunnel launcher",
+  "type": "module",
+  "bin": { "xpotato-mcp-tunnel": "bin/cli.mjs" },
+  "scripts": { "test": "node --test", "check": "node --check bin/cli.mjs && node --check src/launcher.mjs && node --check src/install.mjs && node --check src/stdio.mjs && node --check src/identity.mjs && node --check src/commander-compat.mjs && node --check scripts/install-smoke.mjs", "smoke:install": "node scripts/install-smoke.mjs" },
+  "engines": { "node": ">=22" },
+  "os": ["win32"],
+  "files": ["bin", "src", "runtime", "README.md", "docs", "scripts"]
+}
