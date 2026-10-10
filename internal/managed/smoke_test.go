@@ -105,7 +105,7 @@ func TestManagedInstallSmoke(t *testing.T) {
 		IsError bool `json:"isError"`
 	}
 	if json.Unmarshal(search["result"], &toolResult) != nil || toolResult.IsError {
-		t.Fatal("hermetic search startup failed")
+		t.Fatalf("hermetic search startup failed on isolated fixture: %s", search["result"])
 	}
 	text := ""
 	for _, c := range toolResult.Content {
