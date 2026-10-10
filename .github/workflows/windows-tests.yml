@@ -3,10 +3,55 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, feat/windows-tunnel-cli]
+    branches: [main, feat/windows-tunnel-cli, feat/setup-once-core]
 permissions:
   contents: read
 jobs:
+  go-tests:
+    name: Go / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            binary: xpotato-tunnel.exe
+            platform: windows-amd64
+          - os: ubuntu-latest
+            binary: xpotato-tunnel
+            platform: linux-amd64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - run: go test -v -count=1 ./...
+        env:
+          XPOTATO_RUNTIME_SMOKE: '1'
+      - run: go vet ./...
+      - name: Build review package (no publishing)
+        shell: bash
+        run: |
+          mkdir -p dist review
+          go build -trimpath -o dist/${{ matrix.binary }} ./cmd/xpotato-tunnel
+          cp docs/setup-once-core.md dist/README.md
+          (cd dist && sha256sum ${{ matrix.binary }} > SHA256SUMS)
+          go version -m dist/${{ matrix.binary }} > dist/build-info.txt
+          tar -czf review/xpotato-tunnel-${{ matrix.platform }}.tar.gz -C dist .
+          verify_dir=$(mktemp -d)
+          tar -xzf review/xpotato-tunnel-${{ matrix.platform }}.tar.gz -C "$verify_dir"
+          (cd "$verify_dir" && sha256sum -c SHA256SUMS && ./${{ matrix.binary }} version)
+          if [[ '${{ matrix.platform }}' == linux-* ]]; then test -x "$verify_dir/${{ matrix.binary }}"; fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: xpotato-tunnel-${{ matrix.platform }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: review/
+          if-no-files-found: error
+          retention-days: 14
   windows-tests:
     name: Node 24 / Windows fixtures
     runs-on: windows-latest
