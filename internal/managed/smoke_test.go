@@ -17,7 +17,13 @@ func TestManagedInstallSmoke(t *testing.T) {
 	if os.Getenv("XPOTATO_RUNTIME_SMOKE") != "1" {
 		t.Skip("opt-in official downloads and isolated stdio smoke; no key required")
 	}
-	home := t.TempDir()
+	// Windows CI TEMP uses an 8.3 alias (RUNNER~1). Commander checks the
+	// real path against allowedDirectories, so configure the canonical fixture
+	// rather than granting an alias that its validator correctly rejects.
+	home, e := filepath.EvalSymlinks(t.TempDir())
+	if e != nil {
+		t.Fatal(e)
+	}
 	m := Manager{}
 	id, e := m.Install(home)
 	if e != nil {
