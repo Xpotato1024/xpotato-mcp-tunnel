@@ -1,5 +1,24 @@
 # xpotato-mcp-tunnel
 
+Go コア 0.2.0 は Windows／Linux の資格情報保存を分離し、Setup の保存同意・非表示キー入力後は、インストール済みコマンド一つで起動します。PS/cmd/sh は引数を転送するだけです。固定版 Node は Desktop Commander の実行用に管理します。
+
+```text
+go build -trimpath ./cmd/xpotato-tunnel
+xpotato-tunnel setup
+```
+
+通常ユーザーで Setup を実行すると、端末名・Tunnel ID・許可ディレクトリとキー保存同意を確認します。以後は生成した `bin/xpotato-tunnel.cmd`（Windows）または `bin/xpotato-tunnel`（Linux）を起動します。Start で npm/Git を取得したりキーを再入力したりする処理はありません。
+
+詳細と本人の次のコマンドは [Go Setup と起動](docs/setup-once-core.md) を参照してください。Windows はユーザー Credential Manager、Linux は解除済みのユーザー Secret Service を使用します。Linux headless／ロック中には平文へフォールバックせず停止します。
+
+**プラグインのアカウント登録は未自動化です。** Setup は Tunnel ID と登録案内を生成します。本人が検証した直接 HTTPS MCP URL を指定した場合は portable plugin bundle も生成しますが、アップロード・有効化は行いません。公式の Tunnel 登録は [ChatGPT Plugins の手順](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels#connect-from-chatgpt) に従います。
+
+開発検証は `go test -count=1 ./...`、`go vet ./...`、`npm run check`、`npm test` です。実キー・実 Vault・実接続を使わないテストで、旧 Node CLI の検証も保持しています。
+
+## 旧 Node CLI 0.1.1 の記録
+
+以下は PR #1 のプロトタイプの手順です。Go コアの入口は上の案内を使用してください。
+
 Desktop Commander と OpenAI Secure MCP Tunnel を通常ユーザーで利用するための薄い Windows 向け Node CLI です。`setup / start / doctor / update` を提供します。
 
 現版は安全な起動基盤の試作です。目標である「setup で一度キーを入力し接続/プラグインを登録、以後ワンコマンドで追加入力なく起動」は未実装です。現在の start は毎回マスク入力します。資格情報保管と接続登録の設計は次段階で、現版の手順を最終 UX として扱いません。
