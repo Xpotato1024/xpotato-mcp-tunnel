@@ -21,7 +21,7 @@ func validateEndpoint(raw string) error {
 // streamable HTTP endpoint from a Tunnel ID or claim account registration.
 func Registration(o Options, d Device) error {
 	root := filepath.Join(directory(o), "registration")
-	if e := atomicJSON(filepath.Join(root, "tunnel-registration.json"), map[string]any{"schemaVersion": 1, "device": d.Name, "tunnelId": d.Tunnel, "status": "account-registration-pending", "url": "https://chatgpt.com/plugins", "steps": []string{"Start this device's tunnel", "Add custom MCP server, choose Tunnel, select this tunnel ID", "Review authentication and permissions, then create as a plugin"}}); e != nil {
+	if e := atomicJSON(filepath.Join(root, "tunnel-registration.json"), map[string]any{"schemaVersion": 1, "device": d.Name, "tunnelId": d.Tunnel, "status": "account-registration-not-probed", "url": "https://chatgpt.com/plugins", "steps": []string{"Reuse the existing plugin bound to this same Tunnel ID; do not create a duplicate", "If no plugin exists: start this device's tunnel, add custom MCP server, choose Tunnel and this ID", "For new registration only: review authentication and permissions, then create as a plugin"}}); e != nil {
 		return e
 	}
 	if d.MCPURL == "" {

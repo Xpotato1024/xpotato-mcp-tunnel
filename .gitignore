@@ -12,3 +12,4 @@ devices/
 credentials*
 /xpotato-tunnel
 /xpotato-tunnel.exe
+/dist/

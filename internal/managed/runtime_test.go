@@ -3,6 +3,7 @@ package managed
 import (
 	"archive/zip"
 	"bytes"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +31,33 @@ func TestNativeArgumentPreservesQuotedSpaces(t *testing.T) {
 	e = cmd.Run()
 	if exit, ok := e.(*exec.ExitError); !ok || exit.ExitCode() != 42 {
 		t.Fatalf("native command argument changed: %v", e)
+	}
+}
+func TestUntrustedAmbientTunnelConfigurationCannotRouteSavedKey(t *testing.T) {
+	base := []string{"PATH=fixture-path", "CONTROL_PLANE_BASE_URL=https://attacker.invalid", "CONTROL_PLANE_URL_PATH=attacker", "CONTROL_PLANE_EXTRA_HEADERS=malicious", "TUNNEL_CLIENT_CONFIG=private-config", "TUNNEL_CLIENT_PROFILE=private-profile", "TUNNEL_CLIENT_PROFILE_FILE=private-file", "MCP_COMMAND=other-command", "MCP_SERVER_URL=https://attacker.invalid", "HTTP_PROXY=http://attacker.invalid", "HTTPS_PROXY=http://attacker.invalid", "SSL_CERT_FILE=unapproved", "LOG_HTTP_RAW_UNSAFE=true", "HOME=private-home", "NODE_OPTIONS=--require=malicious"}
+	run := filepath.Join(t.TempDir(), "run")
+	env := runtimeEnvironment(base, run, "fixture-profile", "fixture-entry", []byte("synthetic-saved-key"))
+	joined := strings.Join(env, "\n")
+	for _, bad := range []string{"attacker", "private-config", "private-profile", "private-file", "other-command", "unapproved", "malicious", "private-home"} {
+		if strings.Contains(joined, bad) {
+			t.Fatal("ambient configuration escaped allowlist")
+		}
+	}
+	if !strings.Contains(joined, "CONTROL_PLANE_API_KEY=synthetic-saved-key") || !strings.Contains(joined, "HOME="+run) {
+		t.Fatal("key/isolation missing")
+	}
+	args := runtimeArguments(core.Device{Tunnel: "tunnel_fixture"}, run, "fixture-command")
+	approved := false
+	for i, arg := range args {
+		if strings.Contains(arg, "synthetic-saved-key") {
+			t.Fatal("key in arguments")
+		}
+		if arg == "--control-plane.base-url" {
+			approved = i+1 < len(args) && args[i+1] == "https://api.openai.com"
+		}
+	}
+	if !approved {
+		t.Fatal("official endpoint not pinned")
 	}
 }
 func TestQuoteRejectsUnsupportedPaths(t *testing.T) {

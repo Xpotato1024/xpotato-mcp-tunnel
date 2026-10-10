@@ -11,6 +11,9 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/lockfile"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/platform"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/processctrl"
 	"io"
 	"net/http"
 	"os"
@@ -24,12 +27,13 @@ import (
 	"time"
 )
 
-//go:embed assets/stdio.mjs
+//go:embed assets/stdio.mjs assets/package-lock.json
 var assets embed.FS
 
 const nodeVersion = "24.14.0"
 const commanderVersion = "0.2.52"
 const tunnelVersion = "0.0.16"
+const dependencyLockSHA = "24a35c65bbc5ba7996ed70505bc60795f44e9d29f924451da0409f01a639d65d"
 
 type Manifest struct{ Platform, NodeURL, NodeSHA, TunnelURL, TunnelSHA, ExecutableSHA string }
 
@@ -280,12 +284,15 @@ func (Manager) Install(home string) (string, error) {
 		return "", e
 	}
 	lock := filepath.Join(releases, "install.lock")
-	f, e := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	i, e := platform.CurrentIdentity()
 	if e != nil {
-		return "", errors.New("runtime installation active or stale install.lock remains")
+		return "", errors.New("install lock owner unavailable")
 	}
-	f.Close()
-	defer os.Remove(lock)
+	unlock, e := lockfile.Acquire(lock, i.Owner)
+	if e != nil {
+		return "", e
+	}
+	defer unlock()
 	stage, e := os.MkdirTemp(releases, ".stage-")
 	if e != nil {
 		return "", e
@@ -316,13 +323,20 @@ func (Manager) Install(home string) (string, error) {
 		return "", e
 	}
 	os.Remove(archive)
-	if e = os.WriteFile(filepath.Join(stage, "package.json"), []byte(`{"private":true,"name":"xpotato-managed-runtime","version":"1.0.0"}`), 0600); e != nil {
+	if e = os.WriteFile(filepath.Join(stage, "package.json"), []byte(`{"private":true,"name":"xpotato-managed-runtime","version":"1.0.0","dependencies":{"@wonderwhy-er/desktop-commander":"0.2.52"}}`), 0600); e != nil {
+		return "", e
+	}
+	dependencyLock, _ := assets.ReadFile("assets/package-lock.json")
+	if hashBytes(dependencyLock) != dependencyLockSHA {
+		return "", errors.New("bundled dependency lock changed")
+	}
+	if e = os.WriteFile(filepath.Join(stage, "package-lock.json"), dependencyLock, 0600); e != nil {
 		return "", e
 	}
 	node, npm := nodeFiles(stage)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, node, npm, "install", "--save-exact", "--ignore-scripts", "--no-audit", "--no-fund", "--bin-links=false", "@wonderwhy-er/desktop-commander@"+commanderVersion)
+	cmd := exec.CommandContext(ctx, node, npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--bin-links=false")
 	cmd.Dir = stage
 	// Own cache; no inherited authentication configuration or npm config files.
 	cache := filepath.Join(stage, ".npm-cache")
@@ -406,6 +420,9 @@ func verifyDirectory(dir string, m Manifest) error {
 	if actual[executable()] != m.ExecutableSHA {
 		return errors.New("official tunnel executable changed")
 	}
+	if actual["package-lock.json"] != dependencyLockSHA {
+		return errors.New("reviewed dependency lock changed")
+	}
 	stdio, _ := assets.ReadFile("assets/stdio.mjs")
 	if actual["stdio.mjs"] != hashBytes(stdio) {
 		return errors.New("stdio adapter changed")
@@ -461,6 +478,26 @@ func Command(node, stdio string) (string, error) {
 	}
 	return n + " " + s + " --no-onboarding", nil
 }
+
+const controlPlaneURL = "https://api.openai.com"
+
+func runtimeEnvironment(base []string, run, profile, entry string, key []byte) []string {
+	allowed := map[string]bool{"PATH": true, "SYSTEMROOT": true, "WINDIR": true, "COMSPEC": true, "PATHEXT": true, "OS": true, "PROCESSOR_ARCHITECTURE": true, "LANG": true, "LC_ALL": true, "LC_CTYPE": true, "TZ": true}
+	env := []string{}
+	for _, line := range base {
+		name, _, _ := strings.Cut(line, "=")
+		if allowed[strings.ToUpper(name)] {
+			env = append(env, line)
+		}
+	}
+	for name, value := range map[string]string{"HOME": run, "USERPROFILE": run, "APPDATA": filepath.Join(run, "Roaming"), "LOCALAPPDATA": filepath.Join(run, "Local"), "XDG_CONFIG_HOME": filepath.Join(run, "config"), "XDG_CACHE_HOME": filepath.Join(run, "cache"), "XDG_DATA_HOME": filepath.Join(run, "data"), "TEMP": filepath.Join(run, "tmp"), "TMP": filepath.Join(run, "tmp"), "TMPDIR": filepath.Join(run, "tmp"), "XPOTATO_MCP_PROFILE": profile, "XPOTATO_MCP_COMMANDER_ENTRY": entry, "CONTROL_PLANE_API_KEY": string(key)} {
+		env = append(env, name+"="+value)
+	}
+	return env
+}
+func runtimeArguments(d core.Device, run, command string) []string {
+	return []string{"run", "--profile-dir", filepath.Join(run, "profiles"), "--control-plane.base-url", controlPlaneURL, "--control-plane.url-path", "", "--control-plane.tunnel-id", d.Tunnel, "--control-plane.api-key", "env:CONTROL_PLANE_API_KEY", "--control-plane.max-inflight", "1", "--control-plane.poll-channel", "main", "--mcp.command", command, "--mcp.max-concurrent-requests", "1", "--mcp.stdio-send-initialized-notification", "--health.listen-addr", "127.0.0.1:0", "--health.url-file", filepath.Join(run, "health-url.txt"), "--log.level", "info", "--log.format", "json", "--log.file", filepath.Join(run, "tunnel-info.log"), "--log.http-raw-unsafe=false", "--pid.file", filepath.Join(run, "tunnel.pid")}
+}
 func (Manager) Run(home string, d core.Device, key []byte) (int, error) {
 	dir := filepath.Join(home, "releases", d.Release)
 	node, _ := nodeFiles(dir)
@@ -479,38 +516,29 @@ func (Manager) Run(home string, d core.Device, key []byte) (int, error) {
 	if e != nil {
 		return 1, e
 	}
-	args := []string{"run", "--control-plane.tunnel-id", d.Tunnel, "--control-plane.api-key", "env:CONTROL_PLANE_API_KEY", "--control-plane.max-inflight", "1", "--control-plane.poll-channel", "main", "--mcp.command", command, "--mcp.max-concurrent-requests", "1", "--mcp.stdio-send-initialized-notification", "--health.listen-addr", "127.0.0.1:0", "--health.url-file", filepath.Join(run, "health-url.txt"), "--log.level", "info", "--log.format", "json", "--log.file", filepath.Join(run, "tunnel-info.log"), "--log.http-raw-unsafe=false", "--pid.file", filepath.Join(run, "tunnel.pid")}
+	for _, sub := range []string{"profiles", "config", "cache", "data", "tmp", "Roaming", "Local"} {
+		if e = os.MkdirAll(filepath.Join(run, sub), 0700); e != nil {
+			return 1, e
+		}
+	}
+	args := runtimeArguments(d, run, command)
 	cmd := exec.Command(filepath.Join(dir, executable()), args...)
-	cmd.Env = append(cleanEnv(os.Environ(), "CONTROL_PLANE_API_KEY", "OPENAI_API_KEY", "NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE", "XPOTATO_MCP_PROFILE", "XPOTATO_MCP_COMMANDER_ENTRY"), "CONTROL_PLANE_API_KEY="+string(key), "XPOTATO_MCP_PROFILE="+profile, "XPOTATO_MCP_COMMANDER_ENTRY="+filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"))
+	cmd.Dir = run
+	cmd.Env = runtimeEnvironment(os.Environ(), run, profile, filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"), key)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if e = cmd.Start(); e != nil {
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(interrupt)
+	clear := func() {
 		cmd.Env = nil
 		for i := range key {
 			key[i] = 0
 		}
-		return 1, errors.New("managed tunnel runtime failed to start")
 	}
-	cmd.Env = nil
-	for i := range key {
-		key[i] = 0
+	defer clear()
+	code, e := processctrl.Run(cmd, interrupt, clear, 5*time.Second)
+	if e != nil {
+		return 1, errors.New("owned tunnel launch/cleanup failed")
 	}
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(interrupt)
-	done := make(chan struct{})
-	defer close(done)
-	go func() {
-		select {
-		case <-interrupt:
-			cmd.Process.Kill()
-		case <-done:
-		}
-	}()
-	if e = cmd.Wait(); e != nil {
-		if exit, ok := e.(*exec.ExitError); ok {
-			return exit.ExitCode(), nil
-		}
-		return 1, errors.New("runtime wait failed")
-	}
-	return 0, nil
+	return code, nil
 }

@@ -1,13 +1,15 @@
 # xpotato-mcp-tunnel
 
-Go コア 0.2.0 は Windows／Linux の資格情報保存を分離し、Setup の保存同意・非表示キー入力後は、インストール済みコマンド一つで起動します。PS/cmd/sh は引数を転送するだけです。固定版 Node は Desktop Commander の実行用に管理します。
+Go コア 0.2.1 は Windows／Linux の資格情報保存を分離し、Setup の保存同意・非表示キー入力後は `xpotato-tunnel` 一つで起動できます。短いコマンドは本人の別の同意で既存ユーザー用 bin に置き、PATH は変更しません。PS/cmd/sh は引数を転送するだけです。
 
 ```text
 go build -trimpath ./cmd/xpotato-tunnel
 xpotato-tunnel setup
 ```
 
-通常ユーザーで Setup を実行すると、端末名・Tunnel ID・許可ディレクトリとキー保存同意を確認します。以後は生成した `bin/xpotato-tunnel.cmd`（Windows）または `bin/xpotato-tunnel`（Linux）を起動します。Start で npm/Git を取得したりキーを再入力したりする処理はありません。
+本人は private CI のレビュー済み head に対応する Windows／Linux 実行ファイルと SHA256SUMS を取得できます。Go SDK は開発側にだけ必要です。通常ユーザーの Setup で端末名・既存 Tunnel ID・許可範囲・旧 launcher 停止済みの確認・キー保存同意を行い、同じ Tunnel の既存プラグインを再利用します。短いコマンドの保存先が既存 PATH にあれば `xpotato-tunnel`、なければ `~/.local/bin` の短いパスで起動します。
+
+更新は取得したレビュー済み新実行ファイルの `update` を本人が明示実行します。起動で npm/Git の取得やキーの再入力を行わず、稼働接続を再起動しません。操作手順は [Go Setup と起動](docs/setup-once-core.md) を参照してください。
 
 詳細と本人の次のコマンドは [Go Setup と起動](docs/setup-once-core.md) を参照してください。Windows はユーザー Credential Manager、Linux は解除済みのユーザー Secret Service を使用します。Linux headless／ロック中には平文へフォールバックせず停止します。
 

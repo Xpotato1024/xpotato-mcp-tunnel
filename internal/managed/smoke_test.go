@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -36,15 +38,18 @@ func TestManagedInstallSmoke(t *testing.T) {
 		}
 	}
 	profile := filepath.Join(home, "smoke-profile")
+	searchRoot := filepath.Join(home, "search-fixture")
+	os.MkdirAll(searchRoot, 0700)
+	os.WriteFile(filepath.Join(searchRoot, "needle.txt"), []byte("fixture_unique_search_7d19\n"), 0600)
 	configDir := filepath.Join(profile, ".claude-server-commander")
 	os.MkdirAll(configDir, 0700)
 	os.MkdirAll(filepath.Join(profile, "Temp"), 0700)
-	b, _ := json.Marshal(map[string]any{"allowedDirectories": []string{home}, "blockedCommands": []string{"shutdown"}, "telemetryEnabled": false})
+	b, _ := json.Marshal(map[string]any{"allowedDirectories": []string{searchRoot}, "blockedCommands": []string{"shutdown"}, "telemetryEnabled": false})
 	os.WriteFile(filepath.Join(configDir, "config.json"), b, 0600)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, filepath.Join(dir, "stdio.mjs"), "--no-onboarding")
-	cmd.Env = append(cleanEnv(os.Environ(), "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY", "NODE_OPTIONS", "NODE_PATH"), "XPOTATO_MCP_PROFILE="+profile, "XPOTATO_MCP_COMMANDER_ENTRY="+filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"))
+	cmd.Env = append(cleanEnv(os.Environ(), "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY", "NODE_OPTIONS", "NODE_PATH", "PATH"), "PATH=", "XPOTATO_MCP_PROFILE="+profile, "XPOTATO_MCP_COMMANDER_ENTRY="+filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"))
 	stdin, e := cmd.StdinPipe()
 	if e != nil {
 		t.Fatal(e)
@@ -87,6 +92,49 @@ func TestManagedInstallSmoke(t *testing.T) {
 		t.Fatal("empty tools list")
 	}
 	t.Logf("isolated initialize/tools-list succeeded; toolCount=%d; no credential or control-plane connection", len(tools.Tools))
+	// Verify the packaged binary exists and is selected with no host PATH rg.
+	rgProbe := exec.Command(node, "--input-type=module", "-e", `import {rgPath} from '@vscode/ripgrep'; import fs from 'node:fs'; if (!rgPath.includes('node_modules') || !fs.existsSync(rgPath)) process.exit(2);`)
+	rgProbe.Dir = dir
+	rgProbe.Env = append(cleanEnv(os.Environ(), "PATH", "NODE_OPTIONS", "NODE_PATH", "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY"), "PATH=")
+	if e = rgProbe.Run(); e != nil {
+		t.Fatal("locked package ripgrep binary unavailable")
+	}
+	search := request(3, "tools/call", map[string]any{"name": "start_search", "arguments": map[string]any{"path": searchRoot, "pattern": "fixture_unique_search_7d19", "searchType": "content", "literalSearch": true, "maxResults": 10, "timeout_ms": 5000}})
+	var toolResult struct {
+		Content []struct{ Text string }
+		IsError bool `json:"isError"`
+	}
+	if json.Unmarshal(search["result"], &toolResult) != nil || toolResult.IsError {
+		t.Fatal("hermetic search startup failed")
+	}
+	text := ""
+	for _, c := range toolResult.Content {
+		text += c.Text
+	}
+	session := regexp.MustCompile(`search_[0-9]+_[0-9]+`).FindString(text)
+	if session == "" {
+		t.Fatal("search session missing")
+	}
+	matched := false
+	for i := 0; i < 30; i++ {
+		result := request(4+i, "tools/call", map[string]any{"name": "get_more_search_results", "arguments": map[string]any{"sessionId": session, "offset": 0, "length": 20}})
+		if json.Unmarshal(result["result"], &toolResult) != nil || toolResult.IsError {
+			t.Fatal("hermetic search failed")
+		}
+		for _, c := range toolResult.Content {
+			if strings.Contains(c.Text, "needle.txt") && strings.Contains(c.Text, "fixture_unique_search_7d19") {
+				matched = true
+			}
+		}
+		if matched {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !matched {
+		t.Fatal("hermetic search did not return fixture content")
+	}
+	t.Log("functional content search succeeded with PATH empty and locked package rg")
 	if _, e := os.Stat(filepath.Join(configDir, "puppeteer-cache")); e == nil {
 		t.Fatal("startup created Chrome cache")
 	}

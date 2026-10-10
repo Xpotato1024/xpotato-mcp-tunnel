@@ -41,9 +41,15 @@ type fakePrompt struct {
 	yes            bool
 }
 
-func (p *fakePrompt) Text(string) (string, error)  { return "", errors.New("unexpected text prompt") }
-func (p *fakePrompt) Consent(string) (bool, error) { p.consents++; return p.yes, nil }
-func (p *fakePrompt) Key() ([]byte, error)         { p.keys++; return []byte("synthetic-test-key"), nil }
+func (p *fakePrompt) Text(string) (string, error) { return "", errors.New("unexpected text prompt") }
+func (p *fakePrompt) Consent(label string) (bool, error) {
+	if strings.Contains(label, "previous launcher") {
+		return true, nil
+	}
+	p.consents++
+	return p.yes, nil
+}
+func (p *fakePrompt) Key() ([]byte, error) { p.keys++; return []byte("synthetic-test-key"), nil }
 
 type fakeRuntime struct {
 	installs, runs int
@@ -130,7 +136,7 @@ func TestSetupOnceAndPromptFreeStart(t *testing.T) {
 	if strings.Contains(string(b), "synthetic-test-key") {
 		t.Fatal("secret in state")
 	}
-	if exists(filepath.Join(directory(f.o), "start.lock")) {
+	if busy(filepath.Join(directory(f.o), "start.lock")) {
 		t.Fatal("start lock leaked")
 	}
 }
@@ -255,7 +261,7 @@ func TestDeviceAndTunnelDuplicateLocksBeforeKey(t *testing.T) {
 			if kind == "maintenance" {
 				file = filepath.Join(directory(f.o), "maintenance.lock")
 			}
-			unlock, e := acquire(file)
+			unlock, e := acquire(file, "fixture-owner")
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -276,7 +282,7 @@ func TestSameTunnelAcrossDeviceBlocked(t *testing.T) {
 	if _, e := f.app.Setup(o); e != nil {
 		t.Fatal(e)
 	}
-	unlock, _ := acquire(filepath.Join(o.Home, "tunnel-locks", digest(o.Tunnel)+".lock"))
+	unlock, _ := acquire(filepath.Join(o.Home, "tunnel-locks", digest(o.Tunnel)+".lock"), "fixture-owner")
 	defer unlock()
 	if _, e := f.app.Start(o); e == nil {
 		t.Fatal("same tunnel duplicate")
@@ -349,7 +355,7 @@ func TestRegistrationHandoffAndOptionalBundle(t *testing.T) {
 	f := prepared(t)
 	root := filepath.Join(directory(f.o), "registration")
 	b, _ := os.ReadFile(filepath.Join(root, "tunnel-registration.json"))
-	if !strings.Contains(string(b), "account-registration-pending") || strings.Contains(string(b), "synthetic-test-key") {
+	if !strings.Contains(string(b), "account-registration-not-probed") || strings.Contains(string(b), "synthetic-test-key") {
 		t.Fatal("registration claim/secret")
 	}
 	f = newFixture(t)

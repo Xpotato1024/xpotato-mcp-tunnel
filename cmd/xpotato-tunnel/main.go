@@ -14,12 +14,13 @@ import (
 	"strings"
 )
 
-const help = `xpotato-tunnel 0.2.0 (Windows/Linux amd64)
+const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
   setup [--device NAME] [--tunnel-id ID] [--allow ABSOLUTE_DIR ...]
   start | doctor | update | rollback | credentials | plugin
   --home ABSOLUTE_DIR  (all commands)
   --device NAME       (omit to use setup's default device)
   --mcp-url HTTPS_URL (setup only; owner-verified direct MCP endpoint, optional)
+  --command-dir DIR  (setup only; optional short command location, local consent)
 Setup requests masked key input and local save consent once.
 Start uses the saved key without prompting; no arguments defaults to start.
 Tunnel plugin account registration requires the ChatGPT Plugins UI.
@@ -74,13 +75,14 @@ func parse(args []string) (string, core.Options, error) {
 	f.StringVar(&o.Device, "device", "", "device")
 	f.StringVar(&o.Tunnel, "tunnel-id", "", "tunnel")
 	f.StringVar(&o.MCPURL, "mcp-url", "", "endpoint")
+	f.StringVar(&o.CommandDir, "command-dir", "", "short command directory")
 	var allow repeated
 	f.Var(&allow, "allow", "root")
 	if e := f.Parse(args); e != nil || f.NArg() != 0 {
 		return "", o, errors.New("invalid options; use help (keys are accepted only by hidden terminal input)")
 	}
 	o.Allow = allow
-	if command != "setup" && (o.Tunnel != "" || o.MCPURL != "" || len(o.Allow) > 0) {
+	if command != "setup" && (o.Tunnel != "" || o.MCPURL != "" || len(o.Allow) > 0 || o.CommandDir != "") {
 		return "", o, errors.New("--tunnel-id/--allow/--mcp-url are setup-only")
 	}
 	if o.Home == "" {
@@ -90,7 +92,7 @@ func parse(args []string) (string, core.Options, error) {
 			return "", o, e
 		}
 	}
-	if command != "setup" {
+	if command != "setup" && !(command == "doctor" && o.Device == "") {
 		var e error
 		o, e = core.Resolve(o)
 		if e != nil {
@@ -113,17 +115,24 @@ func run(args []string) (int, error) {
 		return 0, nil
 	}
 	a := core.App{Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: managed.Manager{}, InstallCommand: managed.InstallCommand}
+	if command == "setup" {
+		a.InstallCommand = func(home string) error { return managed.SetupCommand(home, o.CommandDir, terminal{}) }
+	}
 	switch command {
 	case "setup":
 		o, e = a.Setup(o)
 		if e == nil {
-			fmt.Printf("Setup saved. Start using the command in %s/bin. Account plugin registration is pending; see the device registration directory.\n", o.Home)
+			fmt.Printf("Setup saved. Start: %s\nReuse your existing plugin for this same Tunnel ID; only create a plugin if none exists. Account registration was not checked.\n", managed.StartCommand(o.Home))
 		}
 	case "start":
 		return a.Start(o)
 	case "doctor":
 		var result map[string]any
-		result, e = a.Doctor(o)
+		if o.Device == "" {
+			result, e = a.DoctorHome(o.Home)
+		} else {
+			result, e = a.Doctor(o)
+		}
 		if e == nil {
 			b, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(b))
@@ -138,18 +147,7 @@ func run(args []string) (int, error) {
 	case "rollback":
 		e = a.Update(o, true)
 	case "plugin":
-		var d core.Device // Validate with doctor before writing registration information.
-		_, e = a.Doctor(o)
-		if e == nil {
-			b, err := os.ReadFile(o.Home + string(os.PathSeparator) + "devices" + string(os.PathSeparator) + o.Device + string(os.PathSeparator) + "device.json")
-			if err != nil {
-				e = errors.New("device state unavailable")
-			} else if json.Unmarshal(b, &d) != nil {
-				e = errors.New("device state invalid")
-			} else {
-				e = core.Registration(o, d)
-			}
-		}
+		e = a.Plugin(o)
 	}
 	if e != nil {
 		return 1, e

@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/lockfile"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/platform"
 	"os"
 	"path/filepath"
@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const Version = "0.2.0"
+const Version = "0.2.1"
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 var tunnelPattern = regexp.MustCompile(`^tunnel_[a-zA-Z0-9_-]+$`)
@@ -28,13 +28,14 @@ type Device struct {
 	Credential      string   `json:"credentialRef"`
 	CredentialReady bool     `json:"credentialReady"`
 	ConfigReady     bool     `json:"configReady"`
+	CutoverReady    bool     `json:"cutoverReady"`
 	Release         string   `json:"release"`
 	Previous        string   `json:"previousRelease,omitempty"`
 	MCPURL          string   `json:"mcpUrl,omitempty"`
 }
 type Options struct {
-	Home, Device, Tunnel, MCPURL string
-	Allow                        []string
+	Home, Device, Tunnel, MCPURL, CommandDir string
+	Allow                                    []string
 }
 type Prompt interface {
 	Text(string) (string, error)
@@ -134,19 +135,9 @@ func atomicFile(file string, b []byte, mode os.FileMode) error {
 	}
 	return os.Rename(tmp, file)
 }
-func exists(file string) bool { _, e := os.Stat(file); return e == nil }
-func acquire(file string) (func(), error) {
-	if e := os.MkdirAll(filepath.Dir(file), 0700); e != nil {
-		return nil, e
-	}
-	f, e := os.OpenFile(file, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if e != nil {
-		return nil, errors.New("operation already active or stale lock remains; inspect doctor before retrying")
-	}
-	fmt.Fprintf(f, "%d\n", os.Getpid())
-	f.Close()
-	return func() { os.Remove(file) }, nil
-}
+func exists(file string) bool                    { _, e := os.Stat(file); return e == nil }
+func acquire(file, owner string) (func(), error) { return lockfile.Acquire(file, owner) }
+func busy(file string) bool                      { active, e := lockfile.Active(file); return active || e != nil }
 func (a App) owned(o Options) (Device, error) {
 	var d Device
 	if e := validateOptions(o); e != nil {
@@ -267,7 +258,7 @@ func (a App) Setup(o Options) (Options, error) {
 		d = Device{Schema: 3, Owner: i.Owner, Name: o.Device, Tunnel: o.Tunnel, Approved: o.Allow, MCPURL: o.MCPURL}
 		d.Credential = "xpotato-mcp-tunnel:" + digest(i.Owner+"\x00"+o.Home+"\x00"+o.Device+"\x00"+o.Tunnel)
 	}
-	unlock, e := acquire(filepath.Join(directory(o), "maintenance.lock"))
+	unlock, e := acquire(filepath.Join(directory(o), "maintenance.lock"), i.Owner)
 	if e != nil {
 		return o, e
 	}
@@ -318,6 +309,19 @@ func (a App) Setup(o Options) (Options, error) {
 	}
 	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
 		return o, e
+	}
+	if !d.CutoverReady {
+		yes, err := a.Prompt.Consent("Confirm any previous launcher for this Tunnel ID has been stopped by you; type yes")
+		if err != nil {
+			return o, err
+		}
+		if !yes {
+			return o, errors.New("cutover not ready; existing clients were not stopped by this program")
+		}
+		d.CutoverReady = true
+		if e = atomicJSON(deviceFile(o), d); e != nil {
+			return o, e
+		}
 	}
 	if !d.CredentialReady {
 		if e = a.saveKey(o, &d); e != nil {
@@ -378,7 +382,7 @@ func (a App) Credentials(o Options) error {
 	if e != nil {
 		return e
 	}
-	unlock, e := acquire(filepath.Join(directory(o), "maintenance.lock"))
+	unlock, e := acquire(filepath.Join(directory(o), "maintenance.lock"), d.Owner)
 	if e != nil {
 		return e
 	}
@@ -411,24 +415,24 @@ func (a App) Start(o Options) (int, error) {
 	if e != nil {
 		return 1, e
 	}
-	if !d.ConfigReady || !d.CredentialReady {
+	if !d.ConfigReady || !d.CredentialReady || !d.CutoverReady {
 		return 1, errors.New("setup incomplete; run setup")
 	}
 	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
 		return 1, e
 	}
-	if exists(filepath.Join(directory(o), "maintenance.lock")) {
+	if busy(filepath.Join(directory(o), "maintenance.lock")) {
 		return 1, errors.New("setup/update in progress")
 	}
-	unlock, e := acquire(filepath.Join(directory(o), "start.lock"))
+	unlock, e := acquire(filepath.Join(directory(o), "start.lock"), d.Owner)
 	if e != nil {
 		return 1, e
 	}
 	defer unlock()
-	if exists(filepath.Join(directory(o), "maintenance.lock")) {
+	if busy(filepath.Join(directory(o), "maintenance.lock")) {
 		return 1, errors.New("setup/update in progress")
 	}
-	tunlock, e := acquire(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock"))
+	tunlock, e := acquire(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock"), d.Owner)
 	if e != nil {
 		return 1, e
 	}
@@ -451,7 +455,7 @@ func (a App) Update(o Options, rollback bool) error {
 	if e != nil {
 		return e
 	}
-	unlock, e := acquire(filepath.Join(directory(o), "maintenance.lock"))
+	unlock, e := acquire(filepath.Join(directory(o), "maintenance.lock"), d.Owner)
 	if e != nil {
 		return e
 	}
@@ -475,6 +479,11 @@ func (a App) Update(o Options, rollback bool) error {
 	if e = a.Runtime.Verify(o.Home, next); e != nil {
 		return e
 	}
+	if !rollback && a.InstallCommand != nil {
+		if e = a.InstallCommand(o.Home); e != nil {
+			return e
+		}
+	}
 	if next != d.Release {
 		d.Previous, d.Release = d.Release, next
 		return atomicJSON(deviceFile(o), d)
@@ -486,8 +495,41 @@ func (a App) Doctor(o Options) (map[string]any, error) {
 	if e != nil {
 		return nil, e
 	}
-	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
+	integrity := "not-installed"
+	if d.Release != "" {
+		integrity = "ok"
+		if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
+			integrity = "failed"
+		}
+	}
+	return map[string]any{"integrity": integrity, "credentials": "not-read", "connection": "not-probed", "credentialConfigured": d.CredentialReady, "cutoverReadiness": "owner-asserted-not-probed", "cutoverReady": d.CutoverReady, "pluginAccountRegistration": "not-probed", "release": d.Release, "locks": map[string]bool{"start": busy(filepath.Join(directory(o), "start.lock")), "maintenance": busy(filepath.Join(directory(o), "maintenance.lock")), "tunnel": busy(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock")), "install": busy(filepath.Join(o.Home, "releases", "install.lock"))}}, nil
+}
+func (a App) DoctorHome(home string) (map[string]any, error) {
+	if _, e := a.identity(); e != nil {
 		return nil, e
 	}
-	return map[string]any{"integrity": "ok", "credentials": "not-read", "connection": "not-probed", "credentialConfigured": d.CredentialReady, "pluginAccountRegistration": "not-probed", "release": d.Release, "locks": map[string]bool{"start": exists(filepath.Join(directory(o), "start.lock")), "maintenance": exists(filepath.Join(directory(o), "maintenance.lock")), "tunnel": exists(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock"))}}, nil
+	if e := validateOptions(Options{Home: home, Device: "doctor"}); e != nil {
+		return nil, e
+	}
+	devices := []string{}
+	entries, e := os.ReadDir(filepath.Join(home, "devices"))
+	if e != nil && !os.IsNotExist(e) {
+		return nil, e
+	}
+	for _, entry := range entries {
+		if entry.IsDir() && namePattern.MatchString(entry.Name()) {
+			devices = append(devices, entry.Name())
+		}
+	}
+	return map[string]any{"credentials": "not-read", "connection": "not-probed", "devices": devices, "defaultDevice": "not-probed", "locks": map[string]bool{"install": busy(filepath.Join(home, "releases", "install.lock"))}}, nil
+}
+func (a App) Plugin(o Options) error {
+	d, e := a.owned(o)
+	if e != nil {
+		return e
+	}
+	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
+		return e
+	}
+	return Registration(o, d)
 }
