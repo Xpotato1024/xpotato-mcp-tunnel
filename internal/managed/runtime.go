@@ -203,7 +203,7 @@ func extractNode(archive, root string) error {
 		if e != nil {
 			return e
 		}
-		if h.Name == strings.TrimSuffix(prefix, "/") {
+		if h.Name == prefix || h.Name == strings.TrimSuffix(prefix, "/") {
 			continue
 		}
 		if !strings.HasPrefix(h.Name, prefix) {
