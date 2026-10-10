@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+*.key
+*.pem
+*.log
+coverage/
+.runtime/
+.profiles/
+.local/
+devices/
+credentials*
