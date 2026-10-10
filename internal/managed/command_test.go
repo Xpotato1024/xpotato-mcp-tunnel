@@ -119,6 +119,38 @@ func TestInterruptedExecutableStageResumes(t *testing.T) {
 		t.Fatal("resumed copy not verified")
 	}
 }
+func TestPrintedStartCommandExecutesWithSpaces(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "App's With Spaces")
+	bin := filepath.Join(t.TempDir(), "User's Bin With Spaces")
+	if e := SetupCommand(home, bin, &commandPrompt{yes: true}); e != nil {
+		t.Fatal(e)
+	}
+	var shell string
+	if runtime.GOOS == "windows" {
+		shell = "powershell.exe"
+	} else {
+		shell = "/bin/sh"
+	}
+	resolved, e := exec.LookPath(shell)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Setenv("PATH", "")
+	printed := StartCommand(home)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command(resolved, "-NoProfile", "-NonInteractive", "-Command", printed+" '-test.run=^TestGeneratedWrapperExecutesNativeArguments$' -- 'two words'; exit $LASTEXITCODE")
+	} else {
+		cmd = exec.Command(resolved, "-c", printed+" -test.run=^TestGeneratedWrapperExecutesNativeArguments$ -- 'two words'")
+	}
+	cmd.Env = append(os.Environ(), "XPOTATO_WRAPPER_FIXTURE=1")
+	output, runErr := cmd.CombinedOutput()
+	e = runErr
+	if exit, ok := e.(*exec.ExitError); !ok || exit.ExitCode() != 42 {
+		t.Fatalf("printed synthetic command failed: %v; %s", e, output)
+	}
+}
+
 func TestGeneratedWrapperExecutesNativeArguments(t *testing.T) {
 	if os.Getenv("XPOTATO_WRAPPER_FIXTURE") == "1" {
 		joined := strings.Join(os.Args, "|")

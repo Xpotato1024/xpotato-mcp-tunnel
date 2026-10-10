@@ -80,7 +80,8 @@ func Acquire(path, owner string) (func(), error) {
 	if e != nil {
 		return fail(e)
 	}
-	return func() { unlock(f); f.Close() }, nil
+	track(f)
+	return func() { untrack(f); unlock(f); f.Close() }, nil
 }
 
 // Active reads no metadata and changes no content. A retained but unlocked

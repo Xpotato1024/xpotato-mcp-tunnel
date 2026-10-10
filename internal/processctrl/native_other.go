@@ -11,7 +11,9 @@ import (
 
 type control struct{}
 
-func prepare(*exec.Cmd) (*control, error)      { return nil, errors.New("unsupported child lifecycle") }
+func prepare(*exec.Cmd, time.Duration) (*control, error) {
+	return nil, errors.New("unsupported child lifecycle")
+}
 func (*control) attach(*exec.Cmd) error        { return nil }
 func (*control) graceful(*exec.Cmd, os.Signal) {}
 func (*control) kill()                         {}

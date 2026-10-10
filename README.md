@@ -1,6 +1,6 @@
 # xpotato-mcp-tunnel
 
-Go コア 0.2.1 は Windows／Linux の資格情報保存を分離し、Setup の保存同意・非表示キー入力後は `xpotato-tunnel` 一つで起動できます。短いコマンドは本人の別の同意で既存ユーザー用 bin に置き、PATH は変更しません。PS/cmd/sh は引数を転送するだけです。
+Go コア 0.2.2 は Windows／Linux の資格情報保存を分離し、Setup の保存同意・非表示キー入力後は `xpotato-tunnel` 一つで起動できます。短いコマンドは本人の別の同意で既存ユーザー用 bin に置き、PATH は変更しません。PS/cmd/sh は引数を転送するだけです。
 
 ```text
 go build -trimpath ./cmd/xpotato-tunnel

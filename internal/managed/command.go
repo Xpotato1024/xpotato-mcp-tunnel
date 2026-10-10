@@ -201,12 +201,19 @@ func StartCommand(home string) string {
 			}
 		}
 		if runtime.GOOS == "windows" {
-			return filepath.Join(r.Directory, "xpotato-tunnel.cmd")
+			return startInvocation(filepath.Join(r.Directory, "xpotato-tunnel.cmd"))
 		}
-		return filepath.Join(r.Directory, "xpotato-tunnel")
+		return startInvocation(filepath.Join(r.Directory, "xpotato-tunnel"))
 	}
 	if runtime.GOOS == "windows" {
-		return filepath.Join(home, "bin", "xpotato-tunnel.cmd")
+		return startInvocation(filepath.Join(home, "bin", "xpotato-tunnel.cmd"))
 	}
-	return filepath.Join(home, "bin", "xpotato-tunnel")
+	return startInvocation(filepath.Join(home, "bin", "xpotato-tunnel"))
+}
+
+func startInvocation(path string) string {
+	if runtime.GOOS == "windows" {
+		return "& '" + strings.ReplaceAll(path, "'", "''") + "'"
+	}
+	return "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
 }

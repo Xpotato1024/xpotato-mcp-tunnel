@@ -1,8 +1,10 @@
 # Go コア: Setup と起動
 
-0.2.1 の入口は `cmd/xpotato-tunnel` です。Go を選んだ理由は、単体実行ファイルを配布でき、両 OS の資格情報・ファイルロック・子プロセス API を分離できるためです。PS/cmd/sh は保存済みの Go 実行ファイルへ引数を渡すだけです。Desktop Commander の実行だけに固定版 Node を使用します。旧 Node CLI と 30 テストは保持しています。
+0.2.2 の入口は `cmd/xpotato-tunnel` です。Go を選んだ理由は、単体実行ファイルを配布でき、両 OS の資格情報・ファイルロック・子プロセス API を分離できるためです。PS/cmd/sh は保存済みの Go 実行ファイルへ引数を渡すだけです。Desktop Commander の実行だけに固定版 Node を使用します。旧 Node CLI と 30 テストは保持しています。
 
 ## 本人による導入
+
+CI の artifact ZIP 内には OS 別の tar.gz が入っています。Linux は `tar -xzf xpotato-tunnel-linux-amd64.tar.gz`、展開先で `sha256sum -c SHA256SUMS` と `./xpotato-tunnel version` を実行します。実行権限は tar に保持され、追加の chmod は不要です。Windows は `tar -xzf .\xpotato-tunnel-windows-amd64.tar.gz` で展開し、`Get-FileHash .\xpotato-tunnel.exe -Algorithm SHA256` を SHA256SUMS と比較します。CI は実際に展開・チェックサム確認・version 実行を検証します。
 
 PR の Windows／Linux CI は、実行ファイル・SHA256SUMS・build-info・手順を private review artifact にまとめます。本人はレビュー済み head に対応する artifact を取得し、チェックサムを確認して通常ユーザーで実行します。本人の端末へ Go SDK を導入する必要はありません。公開リリースやアカウント上のプラグイン登録は実施しません。
 
@@ -44,6 +46,10 @@ Start は入力を要求しません。先に本人・非昇格・切替準備�
 
 キーは Tunnel 子プロセスの環境へ渡し、Desktop Commander の import 前に取り除きます。Go の byte buffer は消去しますが、OS/Go の内部コピーや同じユーザー権限からの完全な秘匿は保証しません。終了時は Windows の専用 process group に CTRL_BREAK、Linux の専用 process group に SIGTERM を送り、最大 5 秒待った後に、この起動だけの Windows Job Object／Linux process group を回収します。Windows は launcher 強制終了時も Job Object が子孫を終了させます。Linux で意図的に別 session/group へ脱出したプロセスは回収対象外です。
 
+Linux の launcher が SIGKILL や SIGHUP で終了した場合、別 process group の専用 supervisor が private pipe の EOF を検出し、起動した runtime group を終了します。supervisor は取得済み flock の記述を保持し、子孫の終了と reap が済むまで二重起動を防ぎます。終了不能な owned group が残る場合もロックを保持して拒否を継続します。意図的な group/session 脱出は既存の対象外です。
+
+Linux の非表示キー入力は Ctrl+C / SIGTERM / SIGHUP を中断として返し、元の端末状態を復元して未確定入力を破棄します。SIGKILL など捕捉不能な終了は端末復元の対象外です。
+
 ## 再開・更新・確認
 
 Setup は途中状態を保持します。保存を断ったり、ネットワーク／Vault で失敗した場合、同じ端末名で再実行します。完了済みのキー保存は繰り返しません。保存と状態書き込みの間で失敗した場合は、次回もう一度同じレコードへの保存同意が必要です。既存 Commander 設定はバイト単位で保持し、許可ルートの縮小は認め、拡大は新しい端末の Setup を要求します。旧 schema 2 や孤立 profile を自動移行しません。
@@ -57,11 +63,11 @@ Setup は途中状態を保持します。保存を断ったり、ネットワ�
 | `rollback` | 保存済みの前 runtime へ参照を戻す。現コアが認識する版に限る |
 | `plugin` | 登録用情報／指定済み直接 MCP endpoint の bundle を再生成 |
 
-今回の固定版は Go コア 0.2.1、Node 24.14.0、Tunnel runtime 0.0.16、Desktop Commander 0.2.52 です。npm はレビュー済み `package-lock.json` の `ci --ignore-scripts` で全推移依存を固定します。ripgrep 1.18.0 と各 OS 用 optional binary package も lock に含み、ホストの rg を使わない機能検索で検証します。Chrome の自動取得は再有効化しません。
+今回の固定版は Go コア 0.2.2、Node 24.14.0、Tunnel runtime 0.0.16、Desktop Commander 0.2.52 です。npm はレビュー済み `package-lock.json` の `ci --ignore-scripts` で全推移依存を固定します。ripgrep 1.18.0 と各 OS 用 optional binary package も lock に含み、ホストの rg を使わない機能検索で検証します。Chrome の自動取得は再有効化しません。
 
 更新は、取得したレビュー済み新パッケージの `./xpotato-tunnel update`（Windows は `.\xpotato-tunnel.exe update`）を本人が明示実行します。コア、固定 runtime、同意済みの短いコマンドを切り替え、稼働中の接続は再起動しません。Start で npm/Git／パッケージ取得を行わず、背景の自動更新も行いません。実行ファイルは検証済みの同一ディレクトリ stage から atomic rename し、ラッパーの途中更新は intent を使って同じ update の再実行で再開します。旧版と設定は保持します。同じコア版の異なるバイナリは上書きせず停止します。
 
-現行 0.2.1 に別 runtime 版は同梱していないため、初回 `rollback` には前版がありません。runtime rollback は、そのコアが認識する版に限ります。
+現行 0.2.2 に別 runtime 版は同梱していないため、初回 `rollback` には前版がありません。runtime rollback は、そのコアが認識する版に限ります。
 
 二重起動は同じ保存先の端末単位と Tunnel ID 単位で防止します。maintenance/install/start は OS ファイルロックを使い、中断で OS が解放します。本人の OS 所有権と記録所有者を確認して再利用し、ファイルを削除・置換して別の生存中 holder を邪魔しません。lock の所有者メタデータも atomic rename で保存します。旧形式や他所有者の lock は自動採用しません。
 

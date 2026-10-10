@@ -9,7 +9,7 @@ import (
 )
 
 func Run(cmd *exec.Cmd, signals <-chan os.Signal, started func(), grace time.Duration) (int, error) {
-	control, e := prepare(cmd)
+	control, e := prepare(cmd, grace)
 	if e != nil {
 		return 1, e
 	}

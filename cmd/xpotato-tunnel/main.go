@@ -45,7 +45,7 @@ func (terminal) Key() ([]byte, error) {
 		return nil, errors.New("interactive terminal required")
 	}
 	fmt.Print("Runtime API key (input hidden): ")
-	key, e := term.ReadPassword(int(os.Stdin.Fd()))
+	key, e := readKey(int(os.Stdin.Fd()))
 	fmt.Println()
 	return key, e
 }

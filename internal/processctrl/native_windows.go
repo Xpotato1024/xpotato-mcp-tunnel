@@ -17,7 +17,7 @@ type control struct {
 	pid uint32
 }
 
-func prepare(cmd *exec.Cmd) (*control, error) {
+func prepare(cmd *exec.Cmd, _ time.Duration) (*control, error) {
 	job, e := windows.CreateJobObject(nil, nil)
 	if e != nil {
 		return nil, e
