@@ -2,7 +2,13 @@
 
 Desktop Commander と OpenAI Secure MCP Tunnel を通常ユーザーで利用するための薄い Windows 向け Node CLI です。`setup / start / doctor / update` を提供します。
 
+現版は安全な起動基盤の試作です。目標である「setup で一度キーを入力し接続/プラグインを登録、以後ワンコマンドで追加入力なく起動」は未実装です。現在の start は毎回マスク入力します。資格情報保管と接続登録の設計は次段階で、現版の手順を最終 UX として扱いません。
+
+コードとの差分と最小の拡張案は [次段階の setup 設計](docs/next-setup-design.md) を参照してください。
+
 Windows x64、Node.js 22 以上と付属 npm、Windows PowerShell が必要です。この private リポジトリを取得できる Git の認証は事前に本人が済ませてください。
+
+setup した通常ユーザーを profile の所有者として記録し、管理者実行と別ユーザーによる利用を拒否します。SID はローカル設定に保存し、このリポジトリへ端末固有の SID を埋め込みません。Chrome の初期化時の自動確認・取得・cache 整理は抑止します。
 
 ```powershell
 # Draft PR のレビュー用ブランチ。運用時はレビュー済み commit SHA に固定する。

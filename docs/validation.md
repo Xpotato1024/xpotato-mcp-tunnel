@@ -17,6 +17,11 @@
 - 手動再起動時のキー再入力、config 保持と更新版の選択
 - マスク入力、backspace、raw mode の復旧
 - `EXDEV` で元ファイル・保存済み設定を保持し、copy/delete に切り替えない
+- 管理者・別所有者・未確認の旧 profile をキー入力や書き込み前に拒否
+- 許可ルートの無断拡大を拒否し、範囲を狭める編集は保持
+- Chrome の自動初期化処理を抑止し、明示的な PDF 呼び出しは維持
+- 互換性未確認や未抑止 runtime を再利用しない
+- 同じ home の別 device による同一 Tunnel 並列起動を拒否
 
 `npm run check` は CLI と各 `.mjs` の構文を確認します。このテストで外部の control plane 認証や本番 Tunnel 接続が成功したとは判定しません。
 
@@ -28,7 +33,9 @@ npm run smoke:install -- 'C:\Downloads\tunnel-client-runtime-v0.0.16-windows-amd
 
 ## Windows 実機で確認した結果 (2026-10-10)
 
-Node.js v24.14.0 で隔離テスト 18 件が成功し、構文確認・diff check・14 ファイルの UTF-8 検査に問題はありませんでした。承認済み ZIP を使った実インストール smoke は 30,056 ms で成功し、runtime v0.0.16 と Commander 0.2.52 の initialize/tools/list から 26 ツールを確認しました。profile は一時ディレクトリ、API キーは未使用、control plane は未起動です。初回 20 秒の smoke はタイムアウトし、確認時間を延ばして成功を確認しました。
+Node.js v24.14.0 で Chrome・所有者・許可ルートの回帰を含む隔離テストを検証しています。実 Windows トークンの読取確認も非管理者でした。Chrome 抑止 patch と所有者 guard を含む実 install smoke は 34,958 ms で成功し、runtime v0.0.16 と Commander 0.2.52 の initialize/tools/list から 26 ツールを確認しました。profile は一時ディレクトリ、API キーは未使用、control plane は未起動です。初回の 20 秒制限でタイムアウトしたため、現在の smoke 制限は 60 秒です。
+
+setup 一度のキー入力・接続登録と以後の入力不要起動は、この版の受け入れ合格項目ではありません。未実装の次段階の要件です。
 
 ## 本人の受け入れ確認
 

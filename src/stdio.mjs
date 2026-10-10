@@ -15,6 +15,7 @@ process.env.TEMP = process.env.TMP = path.join(profile, 'Temp');
 process.env.DESKTOP_COMMANDER_DISABLE_TELEMETRY = '1';
 process.env.DC_FLAG_URL = 'http://127.0.0.1:1/flags.json';
 delete process.env.DC_REMOTE_DEVICE;
+delete process.env.LLM01_ALLOW_CHROME_DOWNLOAD;
 delete process.env.CONTROL_PLANE_API_KEY;
 delete process.env.OPENAI_API_KEY;
 delete process.env.XPOTATO_MCP_PROFILE;

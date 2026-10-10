@@ -8,6 +8,19 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { parse, locations, quoteMcpPath, tunnelArgs, maskedKey, setup, update, start, doctor, main } from '../src/launcher.mjs';
 import { bundledManifest, hash, releaseId, ensureRelease, verifyRelease, atomicJson, renameStrict } from '../src/install.mjs';
+import { suppressStartupChrome } from '../src/commander-compat.mjs';
+import { normalIdentity, currentIdentity, validSid } from '../src/identity.mjs';
+
+const fixtureIdentity = { sid: 'S-1-5-21-111-222-333-444', elevated: false };
+const fakeCommander = `let chromeCalls = 0;
+export function ensureChromeAvailable() { chromeCalls++; }
+export function startup() {
+  // Preemptively check/download Chrome for PDF generation (runs in background)
+  ensureChromeAvailable();
+}
+export function pdfRequested() { ensureChromeAvailable(); }
+export function count() { return chromeCalls; }
+`;
 
 async function fixture(t) {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'xpotato fixture '));
@@ -24,11 +37,11 @@ async function fixture(t) {
       calls.push(`npm:${version}`);
       const entry = path.join(directory, 'node_modules', '@wonderwhy-er', 'desktop-commander', 'dist');
       await fs.mkdir(entry, { recursive: true });
-      await fs.writeFile(path.join(entry, 'index.js'), 'export {};');
+      await fs.writeFile(path.join(entry, 'index.js'), fakeCommander);
       await fs.writeFile(path.join(directory, 'package-lock.json'), JSON.stringify({ fixture: version }));
     }
   };
-  const deps = { manifest, install };
+  const deps = { manifest, install, identityReader: async () => ({ ...fixtureIdentity }) };
   return { home, root, options, p, manifest, calls, install, deps };
 }
 
@@ -97,7 +110,7 @@ test('failed update retains selection and config; install lock and owned staging
 test('wrapper-only version update selects a separate release without changing config', async t => {
   const f = await fixture(t); await setup(f.options, f.deps);
   const before = await fs.readFile(f.p.config);
-  const newer = { ...f.manifest, stdioVersion: 2 };
+  const newer = { ...f.manifest, stdioVersion: f.manifest.stdioVersion + 1 };
   await update(f.options, { ...f.deps, manifest: newer });
   assert.notEqual(releaseId(f.manifest), releaseId(newer));
   assert.deepEqual(await fs.readFile(f.p.config), before);
@@ -108,7 +121,7 @@ test('doctor is read only and reports locks without key or connection access', a
   const f = await fixture(t); await setup(f.options, f.deps);
   const before = await fs.readFile(f.p.config); const stat = await fs.stat(f.p.device);
   await fs.writeFile(f.p.lock, 'not inspected');
-  const result = await doctor(f.options);
+  const result = await doctor(f.options, f.deps);
   assert.equal(result.integrity, 'ok'); assert.equal(result.locks.start, true);
   assert.equal(result.credentials, 'not-read'); assert.equal(result.connection, 'not-probed');
   assert.deepEqual(await fs.readFile(f.p.config), before);
@@ -119,14 +132,14 @@ test('changed runtime fails verification before credential prompt', async t => {
   const f = await fixture(t); await setup(f.options, f.deps);
   await fs.writeFile(path.join(f.home, 'releases', releaseId(f.manifest), 'stdio.mjs'), '// changed');
   let prompted = false;
-  await assert.rejects(start(f.options, { credentialReader: async () => { prompted = true; return 'synthetic'; } }), /SHA256/);
+  await assert.rejects(start(f.options, { ...f.deps, credentialReader: async () => { prompted = true; return 'synthetic'; } }), /SHA256/);
   assert.equal(prompted, false);
 });
 
 test('start uses single quoted Windows paths and a native argv array, key only in child environment', async t => {
   const f = await fixture(t); await setup(f.options, f.deps);
   let snapshot;
-  const deps = { node: 'C:\\Program Files\\nodejs\\node.exe', credentialReader: async () => 'synthetic-test-key',
+  const deps = { ...f.deps, node: 'C:\\Program Files\\nodejs\\node.exe', credentialReader: async () => 'synthetic-test-key',
     spawn: (executable, args, options) => {
       snapshot = { executable, args, options: { ...options, env: { ...options.env } } };
       const child = new EventEmitter(); child.kill = () => {};
@@ -150,7 +163,7 @@ test('duplicate start fails without prompting, spawning, deleting lock or touchi
   const f = await fixture(t); await setup(f.options, f.deps);
   await fs.writeFile(f.p.lock, 'owner lock');
   const before = await fs.readFile(f.p.config);
-  await assert.rejects(start(f.options, { credentialReader: () => assert.fail('prompted'), spawn: () => assert.fail('spawned') }), /起動中/);
+  await assert.rejects(start(f.options, { ...f.deps, credentialReader: () => assert.fail('prompted'), spawn: () => assert.fail('spawned') }), /起動中/);
   assert.equal(await fs.readFile(f.p.lock, 'utf8'), 'owner lock');
   assert.deepEqual(await fs.readFile(f.p.config), before);
 });
@@ -158,7 +171,7 @@ test('duplicate start fails without prompting, spawning, deleting lock or touchi
 test('manual restart prompts again, uses updated runtime and keeps config', async t => {
   const f = await fixture(t); await setup(f.options, f.deps);
   const before = await fs.readFile(f.p.config); let prompts = 0; const executables = [];
-  const deps = { credentialReader: async () => { prompts++; return 'synthetic'; }, spawn: executable => {
+  const deps = { ...f.deps, credentialReader: async () => { prompts++; return 'synthetic'; }, spawn: executable => {
     executables.push(executable); const child = new EventEmitter(); child.kill = () => {};
     queueMicrotask(() => child.emit('close', 0)); return child;
   } };
@@ -172,9 +185,9 @@ test('manual restart prompts again, uses updated runtime and keeps config', asyn
 
 test('spawn error and cancelled credential prompt remove only own lock', async t => {
   const f = await fixture(t); await setup(f.options, f.deps);
-  await assert.rejects(start(f.options, { credentialReader: async () => { throw Error('fixture cancellation'); } }), /fixture cancellation/);
+  await assert.rejects(start(f.options, { ...f.deps, credentialReader: async () => { throw Error('fixture cancellation'); } }), /fixture cancellation/);
   assert.equal(await fs.access(f.p.lock).then(() => true, () => false), false);
-  await assert.rejects(start(f.options, { credentialReader: async () => 'synthetic', spawn: () => {
+  await assert.rejects(start(f.options, { ...f.deps, credentialReader: async () => 'synthetic', spawn: () => {
     const child = new EventEmitter(); queueMicrotask(() => child.emit('error', Error('fixture error'))); return child;
   } }), /起動できません/);
   assert.equal(await fs.access(f.p.lock).then(() => true, () => false), false);
@@ -206,7 +219,7 @@ test('Windows native argv preserves the entire MCP command and supports spaced e
 
 test('real child output is inherited and its exit code reaches start', async t => {
   const f = await fixture(t); await setup(f.options, f.deps);
-  const code = await start(f.options, { credentialReader: async () => 'synthetic', spawn: (_exe, _args, options) =>
+  const code = await start(f.options, { ...f.deps, credentialReader: async () => 'synthetic', spawn: (_exe, _args, options) =>
     spawn(process.execPath, ['-e', 'console.log("FIXTURE_CHILD_OUTPUT"); process.exit(9);'], options) });
   assert.equal(code, 9);
 });
@@ -243,4 +256,126 @@ test('unsupported quoting, unknown/key options and unsafe device paths fail clos
     assert.throws(() => parse(args));
   }
   await assert.rejects(main(['doctor', '--device', 'test'], { platform: 'linux' }), /Windows/);
+});
+
+test('normal identity rejects elevated, unavailable and malformed token results', async () => {
+  for (const identity of [{ ...fixtureIdentity, elevated: true }, { sid: fixtureIdentity.sid },
+    { sid: 'not-a-sid', elevated: false }, undefined]) {
+    await assert.rejects(normalIdentity(async () => identity), /非管理者/);
+  }
+  await assert.rejects(normalIdentity(async () => { throw Error('probe failed'); }), /probe failed/);
+});
+
+test('elevated setup is rejected before writing profile or installing runtime', async t => {
+  const f = await fixture(t); const before = await fs.readdir(f.home);
+  await assert.rejects(setup(f.options, { ...f.deps, identityReader: async () => ({ ...fixtureIdentity, elevated: true }) }), /非管理者/);
+  assert.deepEqual(await fs.readdir(f.home), before); assert.deepEqual(f.calls, []);
+});
+
+test('setup binds local intended owner; all commands reject a different owner before mutation or prompt', async t => {
+  const f = await fixture(t); await setup(f.options, f.deps);
+  const device = await readJson(f.p.device);
+  assert.equal(device.schemaVersion, 2); assert.equal(device.ownerSid, fixtureIdentity.sid);
+  assert.deepEqual(device.approvedDirectories, [f.root]);
+  const before = await fs.readFile(f.p.config); const deviceBefore = await fs.readFile(f.p.device);
+  const bad = { ...f.deps, identityReader: async () => ({ sid: 'S-1-5-21-111-222-333-999', elevated: false }),
+    credentialReader: () => assert.fail('prompted'), spawn: () => assert.fail('spawned') };
+  for (const command of [setup, start, update, doctor]) await assert.rejects(command(f.options, bad), /ユーザー/);
+  assert.deepEqual(await fs.readFile(f.p.config), before); assert.deepEqual(await fs.readFile(f.p.device), deviceBefore);
+  assert.equal((await fs.readdir(f.p.directory)).some(file => file.endsWith('.lock')), false);
+});
+
+test('edited roots cannot silently widen approval; narrower subdirectory remains allowed', async t => {
+  const f = await fixture(t); await setup(f.options, f.deps); const config = await readJson(f.p.config);
+  await atomicJson(f.p.config, { ...config, allowedDirectories: [f.home] });
+  const before = await fs.readFile(f.p.config);
+  const deps = { ...f.deps, credentialReader: () => assert.fail('prompted'), spawn: () => assert.fail('spawned') };
+  for (const command of [setup, start, update, doctor]) await assert.rejects(command({ ...f.options, allow: [] }, deps), /許可ルート/);
+  assert.deepEqual(await fs.readFile(f.p.config), before);
+  const narrow = path.join(f.root, 'narrow'); await fs.mkdir(narrow);
+  await atomicJson(f.p.config, { ...config, allowedDirectories: [narrow] });
+  assert.equal((await doctor(f.options, f.deps)).integrity, 'ok');
+  await setup({ ...f.options, allow: [] }, f.deps);
+  assert.deepEqual((await readJson(f.p.config)).allowedDirectories, [narrow]);
+});
+
+test('unowned orphan or pre-guard legacy profile is never adopted or overwritten', async t => {
+  const f = await fixture(t); await atomicJson(f.p.config, { allowedDirectories: [f.root] });
+  const before = await fs.readFile(f.p.config);
+  await assert.rejects(setup(f.options, f.deps), /所有者未確認/); assert.deepEqual(f.calls, []);
+  await atomicJson(f.p.device, { schemaVersion: 1, tunnelId: 'tunnel_fixture', runtime: f.manifest });
+  await assert.rejects(setup(f.options, f.deps), /schema 2/);
+  await assert.rejects(start(f.options, f.deps), /schema 2/);
+  assert.deepEqual(await fs.readFile(f.p.config), before);
+});
+
+test('reviewed compat patch suppresses automatic Chrome but leaves explicit PDF behavior unchanged', async () => {
+  const patched = suppressStartupChrome(fakeCommander);
+  const module = await import(`data:text/javascript;base64,${Buffer.from(patched).toString('base64')}`);
+  module.startup(); assert.equal(module.count(), 0);
+  module.pdfRequested(); assert.equal(module.count(), 1);
+  assert.throws(() => suppressStartupChrome('export {};'), /既知の形/);
+  assert.throws(() => suppressStartupChrome(fakeCommander + fakeCommander), /既知の形/);
+});
+
+test('unrecognized upstream startup blocks update and keeps existing selection and config', async t => {
+  const f = await fixture(t); await setup(f.options, f.deps);
+  const before = await fs.readFile(f.p.device); const config = await fs.readFile(f.p.config);
+  const install = { ...f.install, installCommander: async (directory, version) => {
+    await f.install.installCommander(directory, version);
+    await fs.writeFile(path.join(directory, 'node_modules/@wonderwhy-er/desktop-commander/dist/index.js'), 'export {};');
+  } };
+  await assert.rejects(update(f.options, { ...f.deps, manifest: { ...f.manifest, stdioVersion: 3 }, install }), /互換性レビュー/);
+  assert.deepEqual(await fs.readFile(f.p.device), before); assert.deepEqual(await fs.readFile(f.p.config), config);
+  assert.deepEqual(await fs.readdir(path.join(f.home, 'releases')), [releaseId(f.manifest)]);
+});
+
+test('Windows token probe is read only and returns validated identity/elevation metadata', { skip: process.platform !== 'win32' }, async () => {
+  const result = await currentIdentity();
+  assert.equal(validSid(result.sid), true); assert.equal(typeof result.elevated, 'boolean');
+});
+
+test('elevated start/update/doctor reject before credential, spawn or config writes', async t => {
+  const f = await fixture(t); await setup(f.options, f.deps);
+  const before = await fs.readFile(f.p.device); const config = await fs.readFile(f.p.config);
+  const deps = { ...f.deps, identityReader: async () => ({ ...fixtureIdentity, elevated: true }),
+    credentialReader: () => assert.fail('prompted'), spawn: () => assert.fail('spawned') };
+  for (const command of [start, update, doctor]) await assert.rejects(command(f.options, deps), /非管理者/);
+  assert.deepEqual(await fs.readFile(f.p.device), before); assert.deepEqual(await fs.readFile(f.p.config), config);
+  assert.equal((await fs.readdir(f.p.directory)).some(file => file.endsWith('.lock')), false);
+});
+
+test('unpatched runtime cannot be reused even with a recomputed local receipt hash', async t => {
+  const f = await fixture(t); await setup(f.options, f.deps);
+  const release = path.join(f.home, 'releases', releaseId(f.manifest));
+  const entry = 'node_modules/@wonderwhy-er/desktop-commander/dist/index.js';
+  await fs.writeFile(path.join(release, entry), fakeCommander);
+  const receipt = await readJson(path.join(release, 'receipt.json')); receipt.files[entry] = hash(fakeCommander);
+  await atomicJson(path.join(release, 'receipt.json'), receipt);
+  await assert.rejects(start(f.options, { ...f.deps, credentialReader: () => assert.fail('prompted') }), /互換性レビュー/);
+});
+
+test('different device labels cannot start the same Tunnel concurrently within one home', async t => {
+  const f = await fixture(t); await setup(f.options, f.deps);
+  const other = { ...f.options, device: 'same-tunnel' }; await setup(other, f.deps);
+  let entered; const spawned = new Promise(resolve => { entered = resolve; }); let child;
+  const first = start(f.options, { ...f.deps, credentialReader: async () => 'synthetic', spawn: () => {
+    child = new EventEmitter(); child.kill = () => {}; entered(); return child;
+  } });
+  await spawned;
+  try {
+    await assert.rejects(start(other, { ...f.deps, credentialReader: () => assert.fail('prompted'), spawn: () => assert.fail('spawned') }), /並列起動/);
+    assert.equal((await doctor(other, f.deps)).locks.tunnel, true);
+  } finally { child.emit('close', 0); await first; }
+  assert.deepEqual(await fs.readdir(path.join(f.home, 'tunnel-locks')), []);
+});
+
+test('drive-relative roots/home cannot silently change approval when working drive changes', async t => {
+  const f = await fixture(t);
+  assert.throws(() => parse(['setup', '--device', 'test', '--home', '\\Work']), /絶対パス/);
+  await assert.rejects(setup({ ...f.options, allow: ['\\Work'] }, f.deps), /絶対パス/);
+  assert.deepEqual(f.calls, []);
+  await setup(f.options, f.deps); const config = await readJson(f.p.config);
+  await atomicJson(f.p.config, { ...config, allowedDirectories: ['\\Work'] });
+  await assert.rejects(start(f.options, { ...f.deps, credentialReader: () => assert.fail('prompted') }), /絶対パス/);
 });

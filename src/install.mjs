@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { suppressStartupChrome, assertStartupChromeSuppressed } from './commander-compat.mjs';
 
 export const bundledManifest = JSON.parse(await fs.readFile(new URL('../runtime/manifest.json', import.meta.url), 'utf8'));
 export const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -10,7 +11,7 @@ export const fail = message => Object.assign(new Error(message), { safeMessage: 
 export const exists = async file => fs.access(file).then(() => true, () => false);
 
 export function validateManifest(m) {
-  if (m.schemaVersion !== 1 || !Number.isSafeInteger(m.stdioVersion) || m.stdioVersion < 1 || m.platform !== 'win32-x64' ||
+  if (m.schemaVersion !== 1 || !Number.isSafeInteger(m.stdioVersion) || m.stdioVersion < 2 || m.chromeStartup !== 'suppressed' || m.platform !== 'win32-x64' ||
       !/^\d+\.\d+\.\d+$/.test(m.tunnelVersion) || !/^\d+\.\d+\.\d+$/.test(m.commanderVersion) ||
       !/^[a-f0-9]{64}$/.test(m.archiveSha256) || !/^[a-f0-9]{64}$/.test(m.executableSha256) ||
       m.url !== `https://github.com/openai/tunnel-client/releases/download/v${m.tunnelVersion}/tunnel-client-runtime-v${m.tunnelVersion}-windows-amd64.zip`) {
@@ -76,6 +77,7 @@ export async function verifyRelease(directory, manifest) {
     if (hash(await fs.readFile(path.join(directory, relative))) !== receipt.files[relative]) throw fail('runtime ファイルの SHA256 が一致しません。');
   }
   if (receipt.files['tunnel-client-runtime.exe'] !== manifest.executableSha256) throw fail('公式 runtime の SHA256 が一致しません。');
+  assertStartupChromeSuppressed(await fs.readFile(path.join(directory, 'node_modules/@wonderwhy-er/desktop-commander/dist/index.js'), 'utf8'));
   return receipt;
 }
 
@@ -103,6 +105,8 @@ export async function ensureRelease(home, manifest, deps = {}) {
     // The official runtime ZIP currently puts this binary at its root.
     if (hash(await fs.readFile(path.join(stage, 'tunnel-client-runtime.exe'))) !== manifest.executableSha256) throw fail('展開した公式 runtime の SHA256 が一致しません。');
     await (deps.installCommander ?? installCommander)(stage, manifest.commanderVersion);
+    const commanderEntry = path.join(stage, 'node_modules', '@wonderwhy-er', 'desktop-commander', 'dist', 'index.js');
+    await fs.writeFile(commanderEntry, suppressStartupChrome(await fs.readFile(commanderEntry, 'utf8')));
     await fs.copyFile(fileURLToPath(new URL('./stdio.mjs', import.meta.url)), path.join(stage, 'stdio.mjs'));
     const files = {};
     for (const relative of ['tunnel-client-runtime.exe', 'stdio.mjs', 'package-lock.json',

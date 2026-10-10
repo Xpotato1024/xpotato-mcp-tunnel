@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
-  "stdioVersion": 1,
+  "stdioVersion": 2,
+  "chromeStartup": "suppressed",
   "tunnelVersion": "0.0.16",
   "commanderVersion": "0.2.52",
   "platform": "win32-x64",

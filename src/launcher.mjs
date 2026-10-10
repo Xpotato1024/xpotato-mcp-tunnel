@@ -3,7 +3,10 @@ import path from 'node:path';
 import os from 'node:os';
 import readline from 'node:readline';
 import { spawn } from 'node:child_process';
-import { bundledManifest, ensureRelease, verifyRelease, validateManifest, releaseId, atomicJson, exists, fail } from './install.mjs';
+import { bundledManifest, ensureRelease, verifyRelease, validateManifest, releaseId, atomicJson, exists, fail, hash } from './install.mjs';
+import { normalIdentity, validSid, assertOwner } from './identity.mjs';
+
+const fullyQualifiedPath = value => typeof value === 'string' && path.win32.isAbsolute(value) && path.win32.parse(value).root.length > 1;
 
 export const help = `xpotato-mcp-tunnel (Windows x64 / Node.js 22+)
   setup --device NAME --tunnel-id ID --allow ABSOLUTE_DIR [--allow ABSOLUTE_DIR]
@@ -29,7 +32,7 @@ export function parse(args) {
     }
   }
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(options.device ?? '')) throw fail('--device は小文字英数字、_、- で指定してください。');
-  if (options.home && !path.win32.isAbsolute(options.home)) throw fail('--home は Windows の絶対パスで指定してください。');
+  if (options.home && !fullyQualifiedPath(options.home)) throw fail('--home はドライブまたは UNC share を含む Windows の絶対パスで指定してください。');
   if (command !== 'setup' && (options.tunnelId || options.allow.length)) throw fail('--tunnel-id/--allow は setup のオプションです。');
   return options;
 }
@@ -46,7 +49,11 @@ async function readDevice(p) {
   let device;
   try { device = JSON.parse(await fs.readFile(p.device, 'utf8')); }
   catch { throw fail('端末設定がありません、または JSON が壊れています。setup/doctor で確認してください。'); }
-  if (device.schemaVersion !== 1 || !/^tunnel_[a-zA-Z0-9_-]+$/.test(device.tunnelId ?? '')) throw fail('端末設定の schemaVersion/tunnelId を確認してください。');
+  if (device.schemaVersion !== 2 || !validSid(device.ownerSid) || !/^tunnel_[a-zA-Z0-9_-]+$/.test(device.tunnelId ?? '') ||
+      !Array.isArray(device.approvedDirectories) || !device.approvedDirectories.length ||
+      device.approvedDirectories.some(root => !fullyQualifiedPath(root))) {
+    throw fail('所有者と許可ルートを保存した schema 2 profile が必要です。旧 profile は変更せず、新しい --device で setup してください。');
+  }
   validateManifest(device.runtime ?? {});
   return device;
 }
@@ -56,10 +63,27 @@ async function readConfig(p) {
   try { config = JSON.parse(await fs.readFile(p.config, 'utf8')); }
   catch { throw fail('Desktop Commander 設定がありません、または JSON が壊れています。'); }
   if (!Array.isArray(config.allowedDirectories) || !config.allowedDirectories.length ||
-      config.allowedDirectories.some(root => typeof root !== 'string' || !path.win32.isAbsolute(root))) {
+      config.allowedDirectories.some(root => !fullyQualifiedPath(root))) {
     throw fail('allowedDirectories に明示的な絶対パスが必要です。空配列は使用できません。');
   }
   return config;
+}
+
+function assertApprovedRoots(config, device) {
+  for (const root of config.allowedDirectories) {
+    const approved = device.approvedDirectories.some(parent => {
+      const relative = path.win32.relative(parent, root);
+      return !path.win32.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..\\');
+    });
+    if (!approved) throw fail('allowedDirectories が setup 時の許可ルートを超えています。新しい --device で明示的に setup してください。');
+  }
+}
+
+async function ownedDevice(p, deps) {
+  const identity = await normalIdentity(deps.identityReader);
+  const device = await readDevice(p);
+  assertOwner(device, identity);
+  return device;
 }
 
 export function quoteMcpPath(value) {
@@ -117,16 +141,21 @@ async function withMaintenance(p, action) {
 
 export async function setup(options, deps = {}) {
   const p = locations(options);
+  const identity = await normalIdentity(deps.identityReader);
+  // Reject unowned/elevated state before taking a writable maintenance lock.
+  if (await exists(p.device)) assertOwner(await readDevice(p), identity);
+  else if (await exists(p.config)) throw fail('所有者未確認の既存 profile は引き継ぎません。別の --device で setup してください。');
   return withMaintenance(p, async () => {
     const old = await exists(p.device) ? await readDevice(p) : undefined;
     const previousConfig = await exists(p.config) ? await readConfig(p) : undefined;
+    if (old) { assertOwner(old, identity); if (previousConfig) assertApprovedRoots(previousConfig, old); }
     if (old && options.tunnelId && old.tunnelId !== options.tunnelId) throw fail('既存端末の tunnelId は上書きしません。別の --device を指定してください。');
     if (previousConfig && options.allow.length && JSON.stringify(previousConfig.allowedDirectories) !== JSON.stringify(options.allow)) {
       throw fail('既存 allowedDirectories は上書きしません。保存済み config.json を本人が編集してください。');
     }
     const tunnelId = old?.tunnelId ?? options.tunnelId;
     if (!/^tunnel_[a-zA-Z0-9_-]+$/.test(tunnelId ?? '')) throw fail('新しい端末には --tunnel-id tunnel_... が必要です。');
-    if (!previousConfig && (!options.allow.length || options.allow.some(root => !path.win32.isAbsolute(root)))) throw fail('新しい端末には --allow の絶対パスが必要です。');
+    if (!previousConfig && (!options.allow.length || options.allow.some(root => !fullyQualifiedPath(root)))) throw fail('新しい端末にはドライブまたは UNC share を含む --allow の絶対パスが必要です。');
     for (const root of previousConfig?.allowedDirectories ?? options.allow) {
       const stat = await fs.stat(root).catch(() => null);
       if (!stat?.isDirectory()) throw fail('--allow の保存先ディレクトリが存在しません。先に本人が作成してください。');
@@ -141,16 +170,19 @@ export async function setup(options, deps = {}) {
         defaultShell: 'powershell.exe', fileReadLineLimit: 100, fileWriteLineLimit: 50, telemetryEnabled: false
       });
     }
-    if (!old) await atomicJson(p.device, { schemaVersion: 1, tunnelId, runtime: manifest });
+    if (!old) await atomicJson(p.device, { schemaVersion: 2, ownerSid: identity.sid,
+      approvedDirectories: [...options.allow], tunnelId, runtime: manifest });
     return { config: p.config, preserved: Boolean(old || previousConfig), runtime: releaseId(manifest) };
   });
 }
 
 export async function update(options, deps = {}) {
   const p = locations(options);
+  const prepared = await ownedDevice(p, deps);
   return withMaintenance(p, async () => {
     const device = await readDevice(p);
-    await readConfig(p);
+    assertOwner(device, { sid: prepared.ownerSid });
+    assertApprovedRoots(await readConfig(p), device);
     const manifest = deps.manifest ?? bundledManifest;
     await (deps.ensureRelease ?? ensureRelease)(p.home, manifest, deps.install);
     await atomicJson(p.device, { ...device, runtime: manifest });
@@ -160,8 +192,8 @@ export async function update(options, deps = {}) {
 
 export async function start(options, deps = {}) {
   const p = locations(options);
-  const device = await readDevice(p);
-  await readConfig(p);
+  const device = await ownedDevice(p, deps);
+  assertApprovedRoots(await readConfig(p), device);
   const release = path.join(p.home, 'releases', releaseId(device.runtime));
   await (deps.verifyRelease ?? verifyRelease)(release, device.runtime);
   // Validate quoting before the prompt. Lock collisions never prompt or kill a process.
@@ -173,11 +205,20 @@ export async function start(options, deps = {}) {
     throw error;
   }
   let credential = '';
+  let tunnelLock;
+  const tunnelLockFile = path.join(p.home, 'tunnel-locks', `${hash(device.tunnelId)}.lock`);
   let child;
   let interrupted = false;
   const signal = () => { interrupted = true; child?.kill(); };
   try {
     await lock.writeFile(JSON.stringify({ launcherPid: process.pid }));
+    await fs.mkdir(path.dirname(tunnelLockFile), { recursive: true });
+    try { tunnelLock = await fs.open(tunnelLockFile, 'wx'); }
+    catch (error) {
+      if (error.code === 'EEXIST') throw fail('同じ保存先の別 profile でこの Tunnel が起動中、または lock が残っています。並列起動せず doctor で確認してください。');
+      throw error;
+    }
+    await tunnelLock.writeFile(JSON.stringify({ launcherPid: process.pid }));
     credential = await (deps.credentialReader ?? maskedKey)();
     if (typeof credential !== 'string' || !credential.length || /[\r\n\0]/.test(credential)) throw fail('キー入力の形式を確認してください。');
     const run = await fs.mkdtemp(path.join(p.directory, 'run-'));
@@ -195,18 +236,21 @@ export async function start(options, deps = {}) {
   } finally {
     credential = '';
     process.off('SIGINT', signal); process.off('SIGTERM', signal);
+    if (tunnelLock) { await tunnelLock.close(); await fs.unlink(tunnelLockFile); }
     await lock.close(); await fs.unlink(p.lock);
   }
 }
 
 export async function doctor(options, deps = {}) {
   const p = locations(options);
-  const device = await readDevice(p);
+  const device = await ownedDevice(p, deps);
   const config = await readConfig(p);
+  assertApprovedRoots(config, device);
   const release = path.join(p.home, 'releases', releaseId(device.runtime));
   await (deps.verifyRelease ?? verifyRelease)(release, device.runtime);
   const locks = {};
-  for (const [name, file] of [['start', p.lock], ['maintenance', path.join(p.directory, 'maintenance.lock')], ['install', path.join(p.home, 'releases', 'install.lock')]]) {
+  for (const [name, file] of [['start', p.lock], ['tunnel', path.join(p.home, 'tunnel-locks', `${hash(device.tunnelId)}.lock`)],
+    ['maintenance', path.join(p.directory, 'maintenance.lock')], ['install', path.join(p.home, 'releases', 'install.lock')]]) {
     locks[name] = await exists(file);
   }
   return { node: process.versions.node, runtime: releaseId(device.runtime), allowedDirectoryCount: config.allowedDirectories.length,
