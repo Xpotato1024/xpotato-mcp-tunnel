@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "stdioVersion": 1,
+  "tunnelVersion": "0.0.16",
+  "commanderVersion": "0.2.52",
+  "platform": "win32-x64",
+  "url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-runtime-v0.0.16-windows-amd64.zip",
+  "archiveSha256": "639fdfe10d91c672d8f8a49386ebf39acaac4e560a88134735b1739a02ddb82d",
+  "executableSha256": "19e7970f825e0180546acba4c73ed1163a85f8d6fdd4393ff0854458a642d1b8"
+}
