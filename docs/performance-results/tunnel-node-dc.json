@@ -1,0 +1,100 @@
+{
+  "note": "Official Tunnel runtime 0.0.16 against only 127.0.0.1 synthetic poll/response; same fixed Node/DC. Separate processes, 10s idle then 100 requests paced over 10s. No owner setup, Vault, actual keys or live service.",
+  "samples": [
+    {
+      "mode": "before-0.2.4",
+      "tunnelVersion": "0.0.16",
+      "nodeVersion": "24.14.0",
+      "commanderVersion": "0.2.52",
+      "completed": 100,
+      "first": {
+        "tunnel": {
+          "CPU": 0.1875,
+          "WorkingSet64": 34504704,
+          "PrivateMemorySize64": 55848960
+        },
+        "node": {
+          "CPU": 2.3125,
+          "WorkingSet64": 151166976,
+          "PrivateMemorySize64": 178458624
+        }
+      },
+      "idle": {
+        "tunnel": {
+          "CPU": 0.1875,
+          "WorkingSet64": 34521088,
+          "PrivateMemorySize64": 55848960
+        },
+        "node": {
+          "CPU": 2.40625,
+          "WorkingSet64": 107294720,
+          "PrivateMemorySize64": 115818496
+        }
+      },
+      "load": {
+        "tunnel": {
+          "CPU": 0.609375,
+          "WorkingSet64": 35749888,
+          "PrivateMemorySize64": 56827904
+        },
+        "node": {
+          "CPU": 3.421875,
+          "WorkingSet64": 110678016,
+          "PrivateMemorySize64": 120393728
+        }
+      },
+      "loadSeconds": 10.475461699999999,
+      "latencyMedianMs": 1.0550999999977648,
+      "latencyP95Ms": 1.4097000000001572,
+      "stderrBytes": 24592
+    },
+    {
+      "mode": "after-details-off",
+      "tunnelVersion": "0.0.16",
+      "nodeVersion": "24.14.0",
+      "commanderVersion": "0.2.52",
+      "completed": 100,
+      "first": {
+        "tunnel": {
+          "CPU": 0.078125,
+          "WorkingSet64": 34230272,
+          "PrivateMemorySize64": 55652352
+        },
+        "node": {
+          "CPU": 2.21875,
+          "WorkingSet64": 150110208,
+          "PrivateMemorySize64": 180514816
+        }
+      },
+      "idle": {
+        "tunnel": {
+          "CPU": 0.078125,
+          "WorkingSet64": 34320384,
+          "PrivateMemorySize64": 55734272
+        },
+        "node": {
+          "CPU": 2.296875,
+          "WorkingSet64": 107352064,
+          "PrivateMemorySize64": 116453376
+        }
+      },
+      "load": {
+        "tunnel": {
+          "CPU": 0.46875,
+          "WorkingSet64": 35692544,
+          "PrivateMemorySize64": 56909824
+        },
+        "node": {
+          "CPU": 3.203125,
+          "WorkingSet64": 110407680,
+          "PrivateMemorySize64": 119939072
+        }
+      },
+      "loadSeconds": 10.493422599999999,
+      "latencyMedianMs": 1.043600000004517,
+      "latencyP95Ms": 1.2419000000008964,
+      "stderrBytes": 31576
+    }
+  ],
+  "candidateActivitySHA256": "6206e39c944b7f222045532dd889402dd79b07403091728df92ecf3b3720a793"
+}

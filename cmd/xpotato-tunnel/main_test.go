@@ -18,6 +18,18 @@ func TestKeyCannotBePassedAsCLIOption(t *testing.T) {
 		t.Fatal("key accepted as argument")
 	}
 }
+
+func TestActivityDetailsRequireExplicitStart(t *testing.T) {
+	for _, command := range []string{"setup", "doctor", "update", "credentials", "plugin"} {
+		if _, _, err := parse([]string{command, "--activity-details"}); err == nil {
+			t.Fatal("details accepted outside start", command)
+		}
+	}
+	_, options, err := parse([]string{"setup", "--home", t.TempDir()})
+	if err != nil || options.ActivityDetails {
+		t.Fatal("details enabled by default", err)
+	}
+}
 func TestHelpAndVersionNeedNoIdentityOrHome(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"version"}} {
 		if _, _, e := parse(args); e != nil {

@@ -2,9 +2,11 @@ package managed
 
 import (
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -55,7 +57,30 @@ func TestActualRuntimeChildIgnoresMaliciousAmbientRouting(t *testing.T) {
 		t.Setenv(name, "malicious-fixture-not-read")
 	}
 	key := []byte("synthetic-routing-key")
-	code, e := (Manager{}).Run(home, core.Device{Name: "fixture", Tunnel: "tunnel_fixture", Release: "fixture"}, key)
+	var messages []string
+	var messageMu sync.Mutex
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	code, e := (Manager{Progress: func(s string) {
+		messageMu.Lock()
+		defer messageMu.Unlock()
+		messages = append(messages, s)
+	}}).Run(home, core.Device{Name: "fixture", Tunnel: "tunnel_fixture", Release: "fixture"}, key)
+	os.Stdout = oldStdout
+	w.Close()
+	out, _ := io.ReadAll(r)
+	r.Close()
+	if len(out) != 0 {
+		t.Fatal("human status contaminated protocol stdout")
+	}
+	joined := strings.Join(messages, "\n")
+	if !strings.Contains(joined, "成功はまだ未確認") || !strings.Contains(joined, "終了コード 42") || strings.Contains(joined, "synthetic-routing-key") {
+		t.Fatal("unsafe or missing launch status")
+	}
 	if e != nil || code != 42 {
 		t.Fatal("actual child routing/credential guard failed")
 	}

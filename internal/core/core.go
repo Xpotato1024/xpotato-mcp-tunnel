@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const Version = "0.2.4"
+const Version = "0.2.5"
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 var tunnelPattern = regexp.MustCompile(`^tunnel_[a-zA-Z0-9_-]+$`)
@@ -38,6 +38,7 @@ type Device struct {
 	MCPURL             string   `json:"mcpUrl,omitempty"`
 }
 type Options struct {
+	ActivityDetails                          bool
 	EnvFile                                  string
 	reviewed                                 *setupReview
 	replaceScope                             bool
@@ -62,6 +63,7 @@ type Runtime interface {
 	Run(string, Device, []byte) (int, error)
 }
 type App struct {
+	Progress       func(string)
 	Identity       func() (platform.Identity, error)
 	Vault          platform.Vault
 	Prompt         Prompt
@@ -449,7 +451,20 @@ func Resolve(o Options) (Options, error) {
 	}
 	return o, validateOptions(o)
 }
-func (a App) Start(o Options) (int, error) {
+func (a App) Start(o Options) (code int, err error) {
+	stage := "保存設定・許可範囲・実行ユーザーの確認"
+	report := func(message string) {
+		stage = message
+		if a.Progress != nil {
+			a.Progress(message)
+		}
+	}
+	defer func() {
+		if err != nil && a.Progress != nil {
+			a.Progress(stage + " — Start の処理に失敗しました")
+		}
+	}()
+	report(stage)
 	d, e := a.owned(o)
 	if e != nil {
 		return 1, e
@@ -477,17 +492,21 @@ func (a App) Start(o Options) (int, error) {
 	if !d.ConfigReady || !d.CredentialReady {
 		return 1, errors.New("setup incomplete; run setup")
 	}
+	report("固定 runtime の整合性を確認")
 	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
 		return 1, e
 	}
+	report("Tunnel の二重起動を確認")
 	tunlock, e := acquire(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock"), d.Owner)
 	if e != nil {
 		return 1, e
 	}
 	defer tunlock()
+	report("本人の資格情報ストアの利用可否を確認")
 	if e = a.Vault.Ready(); e != nil {
 		return 1, e
 	}
+	report("この端末の保存済み資格情報を取得（値は表示しません）")
 	key, e := a.Vault.Load(d.Credential)
 	defer wipe(key)
 	if e != nil {
@@ -496,6 +515,7 @@ func (a App) Start(o Options) (int, error) {
 	if !validKey(key) {
 		return 1, errors.New("saved runtime key invalid; run credentials")
 	}
+	report("Tunnel 子プロセスを準備")
 	return a.Runtime.Run(o.Home, d, key)
 }
 func (a App) Update(o Options, rollback bool) error {

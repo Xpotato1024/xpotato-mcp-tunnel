@@ -1,6 +1,7 @@
 package managed
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -55,6 +56,8 @@ func TestManagedInstallSmoke(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, filepath.Join(dir, "stdio.mjs"), "--no-onboarding")
+	var activity bytes.Buffer
+	cmd.Stderr = &activity
 	cmd.Env = append(cleanEnv(os.Environ(), "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY", "NODE_OPTIONS", "NODE_PATH", "PATH"), "PATH=", "XPOTATO_MCP_PROFILE="+profile, "XPOTATO_MCP_COMMANDER_ENTRY="+filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"))
 	stdin, e := cmd.StdinPipe()
 	if e != nil {
@@ -141,6 +144,11 @@ func TestManagedInstallSmoke(t *testing.T) {
 		t.Fatal("hermetic search did not return fixture content")
 	}
 	t.Log("functional content search succeeded with PATH empty and locked package rg")
+	cmd.Process.Kill()
+	cmd.Wait() // Join stderr copying before examining the display buffer.
+	if !strings.Contains(activity.String(), "start_search 開始") || !strings.Contains(activity.String(), "start_search 応答完了") {
+		t.Fatal("pinned SDK tool lifecycle observer did not run")
+	}
 	if _, e := os.Stat(filepath.Join(configDir, "puppeteer-cache")); e == nil {
 		t.Fatal("startup created Chrome cache")
 	}

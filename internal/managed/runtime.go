@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/lockfile"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/platform"
@@ -27,7 +28,7 @@ import (
 	"time"
 )
 
-//go:embed assets/stdio.mjs assets/package-lock.json
+//go:embed assets/stdio.mjs assets/activity.mjs assets/package-lock.json
 var assets embed.FS
 
 const nodeVersion = "24.14.0"
@@ -66,13 +67,21 @@ func nodeFiles(dir string) (string, string) {
 	return filepath.Join(dir, "node", "bin", "node"), filepath.Join(dir, "node", "lib", "node_modules", "npm", "bin", "npm-cli.js")
 }
 func hashFile(file string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), fileOperationTimeout)
+	defer cancel()
+	return hashFileContext(ctx, file)
+}
+func hashFileContext(ctx context.Context, file string) (string, error) {
+	if e := ctx.Err(); e != nil {
+		return "", e
+	}
 	f, e := os.Open(file)
 	if e != nil {
 		return "", e
 	}
 	defer f.Close()
 	h := sha256.New()
-	if _, e = io.Copy(h, f); e != nil {
+	if _, e = io.Copy(h, contextReader{ctx, f}); e != nil {
 		return "", e
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
@@ -83,7 +92,14 @@ type Receipt struct {
 	Manifest Manifest
 	Files    map[string]string
 }
-type Manager struct{}
+type Manager struct {
+	Progress        func(string)
+	ActivityDetails bool
+}
+
+func (m Manager) stage(label string, work func() error) error {
+	return runStage(m.Progress, label, progressInterval, work)
+}
 
 func download(url, file, expected string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -112,7 +128,10 @@ func download(url, file, expected string) error {
 	if closeErr != nil {
 		return closeErr
 	}
-	h, e := hashFile(file)
+	h, e := hashFileContext(ctx, file)
+	if errors.Is(e, context.DeadlineExceeded) {
+		return errors.New("official archive download/hash exceeded its 3 minute deadline; existing runtime preserved")
+	}
 	if e != nil || h != expected {
 		return errors.New("official archive SHA256 mismatch; existing runtime preserved")
 	}
@@ -130,6 +149,9 @@ func safeArchivePath(root, name string) (string, error) {
 	return filepath.Join(root, clean), nil
 }
 func writeEntry(dest string, r io.Reader, mode os.FileMode) error {
+	return writeEntryContext(context.Background(), dest, r, mode)
+}
+func writeEntryContext(ctx context.Context, dest string, r io.Reader, mode os.FileMode) error {
 	if e := os.MkdirAll(filepath.Dir(dest), 0700); e != nil {
 		return e
 	}
@@ -137,7 +159,7 @@ func writeEntry(dest string, r io.Reader, mode os.FileMode) error {
 	if e != nil {
 		return e
 	}
-	_, e = io.Copy(f, r)
+	_, e = io.Copy(f, contextReader{ctx, r})
 	ce := f.Close()
 	if e != nil {
 		return e
@@ -145,12 +167,20 @@ func writeEntry(dest string, r io.Reader, mode os.FileMode) error {
 	return ce
 }
 func extractZIP(archive, root string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), fileOperationTimeout)
+	defer cancel()
+	return extractZIPContext(ctx, archive, root)
+}
+func extractZIPContext(ctx context.Context, archive, root string) error {
 	z, e := zip.OpenReader(archive)
 	if e != nil {
 		return e
 	}
 	defer z.Close()
 	for _, entry := range z.File {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		dest, err := safeArchivePath(root, entry.Name)
 		if err != nil {
 			return err
@@ -168,7 +198,7 @@ func extractZIP(archive, root string) error {
 		if err != nil {
 			return err
 		}
-		err = writeEntry(dest, r, entry.Mode())
+		err = writeEntryContext(ctx, dest, r, entry.Mode())
 		r.Close()
 		if err != nil {
 			return err
@@ -177,8 +207,10 @@ func extractZIP(archive, root string) error {
 	return nil
 }
 func extractNode(archive, root string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), fileOperationTimeout)
+	defer cancel()
 	if runtime.GOOS == "windows" {
-		if e := extractZIP(archive, root); e != nil {
+		if e := extractZIPContext(ctx, archive, root); e != nil {
 			return e
 		}
 		return os.Rename(filepath.Join(root, "node-v"+nodeVersion+"-win-x64"), filepath.Join(root, "node"))
@@ -196,6 +228,9 @@ func extractNode(archive, root string) error {
 	tr := tar.NewReader(gz)
 	prefix := "node-v" + nodeVersion + "-linux-x64/"
 	for {
+		if e := ctx.Err(); e != nil {
+			return e
+		}
 		h, e := tr.Next()
 		if e == io.EOF {
 			break
@@ -217,7 +252,7 @@ func extractNode(archive, root string) error {
 		case tar.TypeDir:
 			e = os.MkdirAll(dest, 0700)
 		case tar.TypeReg:
-			e = writeEntry(dest, tr, os.FileMode(h.Mode))
+			e = writeEntryContext(ctx, dest, tr, os.FileMode(h.Mode))
 		case tar.TypeSymlink: // Node CLI aliases are unused; never extract links.
 			continue
 		default:
@@ -241,8 +276,25 @@ func patchCommander(b []byte) ([]byte, error) {
 	return chromeCall.ReplaceAll(b, []byte("$1"+marker)), nil
 }
 func filesReceipt(root string) (map[string]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), fileOperationTimeout)
+	defer cancel()
+	return filesReceiptContext(ctx, root)
+}
+func filesReceiptContext(ctx context.Context, root string) (map[string]string, error) {
 	files := map[string]string{}
-	e := filepath.WalkDir(root, func(p string, d os.DirEntry, e error) error {
+	e := walkFileHashes(ctx, root, func(rel, hash string) error {
+		files[rel] = hash
+		return nil
+	})
+	return files, e
+}
+func walkFileHashes(ctx context.Context, root string, visit func(string, string) error) error {
+	hash := sha256.New()
+	buffer := make([]byte, 32*1024)
+	return filepath.WalkDir(root, func(p string, d os.DirEntry, e error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if e != nil {
 			return e
 		}
@@ -260,16 +312,26 @@ func filesReceipt(root string) (map[string]string, error) {
 		if rel == "receipt.json" {
 			return nil
 		}
-		h, e := hashFile(p)
+		f, e := os.Open(p)
 		if e != nil {
 			return e
 		}
-		files[rel] = h
-		return nil
+		hash.Reset()
+		_, e = io.CopyBuffer(hash, contextReader{ctx, f}, buffer)
+		closeErr := f.Close()
+		if e != nil {
+			return e
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		var sum [sha256.Size]byte
+		var encoded [sha256.Size * 2]byte
+		hex.Encode(encoded[:], hash.Sum(sum[:0]))
+		return visit(rel, string(encoded[:]))
 	})
-	return files, e
 }
-func (Manager) Install(home string) (string, error) {
+func (manager Manager) Install(home string) (string, error) {
 	m, e := manifest()
 	if e != nil {
 		return "", e
@@ -277,7 +339,7 @@ func (Manager) Install(home string) (string, error) {
 	id := releaseID(m)
 	dest := filepath.Join(home, "releases", id)
 	if _, e = os.Stat(dest); e == nil {
-		return id, (Manager{}).Verify(home, id)
+		return id, manager.Verify(home, id)
 	}
 	releases := filepath.Dir(dest)
 	if e = os.MkdirAll(releases, 0700); e != nil {
@@ -299,10 +361,10 @@ func (Manager) Install(home string) (string, error) {
 	}
 	defer os.RemoveAll(stage) // only this owned temporary child
 	archive := filepath.Join(stage, "tunnel.zip")
-	if e = download(m.TunnelURL, archive, m.TunnelSHA); e != nil {
+	if e = manager.stage("Tunnel runtime をダウンロード（上限3分）", func() error { return download(m.TunnelURL, archive, m.TunnelSHA) }); e != nil {
 		return "", e
 	}
-	if e = extractZIP(archive, stage); e != nil {
+	if e = manager.stage("Tunnel runtime を展開", func() error { return extractZIP(archive, stage) }); e != nil {
 		return "", e
 	}
 	os.Remove(archive)
@@ -316,10 +378,10 @@ func (Manager) Install(home string) (string, error) {
 		}
 	}
 	archive = filepath.Join(stage, "node.archive")
-	if e = download(m.NodeURL, archive, m.NodeSHA); e != nil {
+	if e = manager.stage("Node をダウンロード（上限3分）", func() error { return download(m.NodeURL, archive, m.NodeSHA) }); e != nil {
 		return "", e
 	}
-	if e = extractNode(archive, stage); e != nil {
+	if e = manager.stage("Node を展開", func() error { return extractNode(archive, stage) }); e != nil {
 		return "", e
 	}
 	os.Remove(archive)
@@ -351,8 +413,16 @@ func (Manager) Install(home string) (string, error) {
 	cmd.Env = cleanNPMEnv(os.Environ())
 	cmd.Env = append(cmd.Env, "NPM_CONFIG_USERCONFIG="+userConfig, "NPM_CONFIG_GLOBALCONFIG="+globalConfig, "NPM_CONFIG_CACHE="+cache, "NPM_CONFIG_REGISTRY=https://registry.npmjs.org/")
 	// npm output may contain inherited proxy/private metadata; do not forward it.
-	if e = cmd.Run(); e != nil {
-		return "", errors.New("pinned Commander install failed; existing runtime preserved")
+	if e = manager.stage("Commander の固定依存をインストール（上限5分）", func() error {
+		if err := cmd.Run(); err != nil {
+			if ctx.Err() != nil {
+				return errors.New("5分の期限を超えました。既存 runtime は保持しています")
+			}
+			return errors.New("pinned Commander install failed; existing runtime preserved")
+		}
+		return nil
+	}); e != nil {
+		return "", e
 	}
 	os.RemoveAll(cache)
 	os.Remove(userConfig)
@@ -373,15 +443,23 @@ func (Manager) Install(home string) (string, error) {
 	if e = os.WriteFile(filepath.Join(stage, "stdio.mjs"), stdio, 0600); e != nil {
 		return "", e
 	}
-	files, e := filesReceipt(stage)
-	if e != nil {
+	activity, _ := assets.ReadFile("assets/activity.mjs")
+	if e = os.WriteFile(filepath.Join(stage, "activity.mjs"), activity, 0600); e != nil {
+		return "", e
+	}
+	var files map[string]string
+	if e = manager.stage("全 runtime ファイルの SHA-256 を記録", func() error {
+		var err error
+		files, err = filesReceipt(stage)
+		return err
+	}); e != nil {
 		return "", e
 	}
 	receipt, _ := json.Marshal(Receipt{m, files})
 	if e = os.WriteFile(filepath.Join(stage, "receipt.json"), receipt, 0600); e != nil {
 		return "", e
 	}
-	if e = verifyDirectory(stage, m); e != nil {
+	if e = manager.stage("展開した全 runtime ファイルを検証", func() error { return verifyDirectory(stage, m) }); e != nil {
 		return "", e
 	}
 	if e = os.Rename(stage, dest); e != nil {
@@ -389,7 +467,7 @@ func (Manager) Install(home string) (string, error) {
 	}
 	return id, nil
 }
-func (Manager) Verify(home, id string) error {
+func (manager Manager) Verify(home, id string) error {
 	m, e := manifest()
 	if e != nil {
 		return e
@@ -397,7 +475,7 @@ func (Manager) Verify(home, id string) error {
 	if id != releaseID(m) {
 		return core.ErrRuntimePinUnsupported
 	}
-	return verifyDirectory(filepath.Join(home, "releases", id), m)
+	return manager.stage("保存済み全 runtime ファイルを検証", func() error { return verifyDirectory(filepath.Join(home, "releases", id), m) })
 }
 func verifyDirectory(dir string, m Manifest) error {
 	b, e := os.ReadFile(filepath.Join(dir, "receipt.json"))
@@ -408,24 +486,38 @@ func verifyDirectory(dir string, m Manifest) error {
 	if json.Unmarshal(b, &r) != nil || r.Manifest != m {
 		return errors.New("runtime receipt manifest mismatch")
 	}
-	actual, e := filesReceipt(dir)
-	if e != nil || len(actual) != len(r.Files) {
-		return errors.New("runtime file inventory changed")
-	}
-	for p, h := range actual {
+	ctx, cancel := context.WithTimeout(context.Background(), fileOperationTimeout)
+	defer cancel()
+	count := 0
+	e = walkFileHashes(ctx, dir, func(p, h string) error {
+		count++
 		if r.Files[p] != h {
 			return errors.New("runtime integrity check failed")
 		}
+		return nil
+	})
+	if errors.Is(e, context.DeadlineExceeded) {
+		return errors.New("runtime verification exceeded its 10 minute deadline; existing runtime preserved")
 	}
-	if actual[executable()] != m.ExecutableSHA {
+	if e != nil {
+		return errors.New("runtime integrity or file inventory check failed")
+	}
+	if count != len(r.Files) {
+		return errors.New("runtime file inventory changed")
+	}
+	if r.Files[executable()] != m.ExecutableSHA {
 		return errors.New("official tunnel executable changed")
 	}
-	if actual["package-lock.json"] != dependencyLockSHA {
+	if r.Files["package-lock.json"] != dependencyLockSHA {
 		return errors.New("reviewed dependency lock changed")
 	}
 	stdio, _ := assets.ReadFile("assets/stdio.mjs")
-	if actual["stdio.mjs"] != hashBytes(stdio) {
+	if r.Files["stdio.mjs"] != hashBytes(stdio) {
 		return errors.New("stdio adapter changed")
+	}
+	activity, _ := assets.ReadFile("assets/activity.mjs")
+	if r.Files["activity.mjs"] != hashBytes(activity) {
+		return errors.New("tool activity observer changed")
 	}
 	b, e = os.ReadFile(filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"))
 	if e != nil || strings.Count(string(b), marker) != 1 || chromeCall.Match(b) {
@@ -496,14 +588,17 @@ func runtimeEnvironment(base []string, run, profile, entry string, key []byte) [
 	return env
 }
 func runtimeArguments(d core.Device, run, command string) []string {
-	return []string{"run", "--profile-dir", filepath.Join(run, "profiles"), "--control-plane.base-url", controlPlaneURL, "--control-plane.url-path", "", "--control-plane.tunnel-id", d.Tunnel, "--control-plane.api-key", "env:CONTROL_PLANE_API_KEY", "--control-plane.max-inflight", "1", "--control-plane.poll-channel", "main", "--mcp.command", command, "--mcp.max-concurrent-requests", "1", "--mcp.stdio-send-initialized-notification", "--health.listen-addr", "127.0.0.1:0", "--health.url-file", filepath.Join(run, "health-url.txt"), "--log.level", "info", "--log.format", "json", "--log.file", filepath.Join(run, "tunnel-info.log"), "--log.http-raw-unsafe=false", "--pid.file", filepath.Join(run, "tunnel.pid")}
+	return []string{"run", "--profile-dir", filepath.Join(run, "profiles"), "--control-plane.base-url", controlPlaneURL, "--control-plane.url-path", "", "--control-plane.tunnel-id", d.Tunnel, "--control-plane.api-key", "env:CONTROL_PLANE_API_KEY", "--control-plane.max-inflight", "1", "--control-plane.poll-channel", "main", "--mcp.command", command, "--mcp.max-concurrent-requests", "1", "--mcp.stdio-send-initialized-notification", "--health.listen-addr", "127.0.0.1:0", "--health.url-file", filepath.Join(run, "health-url.txt"), "--log.level", "info", "--log.format", "", "--log.file", "", "--log.http-raw-unsafe=false", "--pid.file", filepath.Join(run, "tunnel.pid")}
 }
-func (Manager) Run(home string, d core.Device, key []byte) (int, error) {
+func (manager Manager) Run(home string, d core.Device, key []byte) (int, error) {
 	dir := filepath.Join(home, "releases", d.Release)
 	node, _ := nodeFiles(dir)
 	command, e := Command(node, filepath.Join(dir, "stdio.mjs"))
 	if e != nil {
 		return 1, e
+	}
+	if manager.ActivityDetails {
+		command += " --activity-details"
 	}
 	deviceDir := filepath.Join(home, "devices", d.Name)
 	profile := core.ProfilePath(home, d)
@@ -536,9 +631,34 @@ func (Manager) Run(home string, d core.Device, key []byte) (int, error) {
 		}
 	}
 	defer clear()
-	code, e := processctrl.Run(cmd, interrupt, clear, 5*time.Second)
+	stopStatus := func() {}
+	defer func() { stopStatus() }()
+	code, e := processctrl.RunWithStatus(cmd, interrupt, clear, 5*time.Second, func(state string) {
+		if manager.Progress == nil {
+			return
+		}
+		switch state {
+		case "running":
+			manager.Progress("Tunnel 子プロセスを起動しました。接続の成功はまだ未確認です")
+			stopStatus = monitorConnection(filepath.Join(run, "health-url.txt"), manager.Progress, progressInterval)
+		case "stopping":
+			stopStatus()
+			manager.Progress("停止要求を受けました。この起動の子プロセスを停止中（猶予5秒）")
+		case "cleanup":
+			stopStatus()
+			manager.Progress("この起動の子プロセスを終了・回収中")
+		case "stopped":
+			manager.Progress("Tunnel 子プロセスが終了しました")
+		}
+	})
 	if e != nil {
+		if manager.Progress != nil {
+			manager.Progress("Tunnel 子プロセスの起動または回収に失敗しました")
+		}
 		return 1, errors.New("owned tunnel launch/cleanup failed")
+	}
+	if code != 0 && manager.Progress != nil {
+		manager.Progress(fmt.Sprintf("Tunnel 子プロセスが終了コード %d で終了しました", code))
 	}
 	return code, nil
 }

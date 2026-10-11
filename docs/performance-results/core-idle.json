@@ -1,0 +1,23 @@
+{
+  "note": "Two source versions; identical 10s idle fixture. Official Tunnel/Node tool-load measured separately. No real owner state, Vault or key. RSS snapshots include test executable overhead.",
+  "samples": [
+    {
+      "mode": "before",
+      "fixture": "actual core.Start and managed.Run with synthetic Vault and local mock Tunnel; test executable, not release RSS",
+      "idleSeconds": 10,
+      "cpuSeconds": 0,
+      "rssBegin": 54304768,
+      "rssEnd": 54304768,
+      "privateEnd": 49684480
+    },
+    {
+      "mode": "after",
+      "fixture": "actual core.Start and managed.Run with synthetic Vault and local mock Tunnel; test executable, not release RSS",
+      "idleSeconds": 10,
+      "cpuSeconds": 0,
+      "rssBegin": 54673408,
+      "rssEnd": 55300096,
+      "privateEnd": 50630656
+    }
+  ]
+}

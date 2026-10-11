@@ -9,6 +9,16 @@ import (
 )
 
 func Run(cmd *exec.Cmd, signals <-chan os.Signal, started func(), grace time.Duration) (int, error) {
+	return RunWithStatus(cmd, signals, started, grace, nil)
+}
+
+// Status is observational only; the same owned-process cleanup path is used.
+func RunWithStatus(cmd *exec.Cmd, signals <-chan os.Signal, started func(), grace time.Duration, status func(string)) (int, error) {
+	report := func(state string) {
+		if status != nil {
+			status(state)
+		}
+	}
 	control, e := prepare(cmd, grace)
 	if e != nil {
 		return 1, e
@@ -25,12 +35,14 @@ func Run(cmd *exec.Cmd, signals <-chan os.Signal, started func(), grace time.Dur
 	if started != nil {
 		started()
 	}
+	report("running")
 	wait := make(chan error, 1)
 	go func() { wait <- cmd.Wait() }()
 	var waitErr error
 	select {
 	case waitErr = <-wait:
 	case sig := <-signals:
+		report("stopping")
 		control.graceful(cmd, sig)
 		select {
 		case waitErr = <-wait:
@@ -40,7 +52,9 @@ func Run(cmd *exec.Cmd, signals <-chan os.Signal, started func(), grace time.Dur
 		}
 	}
 	// A leader exiting successfully must not leave its owned descendants behind.
+	report("cleanup")
 	control.finish(grace)
+	report("stopped")
 	if waitErr != nil {
 		if exit, ok := waitErr.(*exec.ExitError); ok {
 			return exit.ExitCode(), nil

@@ -40,6 +40,9 @@ jobs:
           go build -trimpath -o dist/${{ matrix.binary }} ./cmd/xpotato-tunnel
           cp docs/setup-once-core.md dist/README.md
           cp docs/setup-env.md dist/setup-env.md
+          cp docs/runtime-ux.md dist/runtime-ux.md
+          cp docs/performance-review.md dist/performance-review.md
+          cp -R docs/performance-results dist/performance-results
           cp setup.env.example dist/setup.env.example
           (cd dist && sha256sum ${{ matrix.binary }} > SHA256SUMS)
           go version -m dist/${{ matrix.binary }} > dist/build-info.txt

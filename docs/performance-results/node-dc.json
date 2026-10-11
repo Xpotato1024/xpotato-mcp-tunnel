@@ -1,0 +1,60 @@
+{
+  "note": "Three separate direct stdio Node/DC fixtures; 10s idle and 100 synthetic get_config calls paced over 10s each; no live connection or actual credentials; RSS snapshots not peaks; console rendering cost excluded.",
+  "samples": [
+    {
+      "mode": "before-0.2.4",
+      "nodeVersion": "24.14.0",
+      "commanderVersion": "0.2.52",
+      "completed": 100,
+      "idleSeconds": 10.2503409,
+      "idleCpuSeconds": 0.078125,
+      "idleRssBegin": 150708224,
+      "idleRssEnd": 107175936,
+      "idlePrivateEnd": 115707904,
+      "loadSeconds": 10.244639800000002,
+      "loadCpuSeconds": 1.171875,
+      "loadRssEnd": 110313472,
+      "loadPrivateEnd": 120139776,
+      "latencyMedianMs": 2.8562999999994645,
+      "latencyP95Ms": 3.541000000001077,
+      "stderrBytes": 0
+    },
+    {
+      "mode": "after-details-off",
+      "nodeVersion": "24.14.0",
+      "commanderVersion": "0.2.52",
+      "completed": 100,
+      "idleSeconds": 10.237913500000003,
+      "idleCpuSeconds": 0.015625,
+      "idleRssBegin": 150712320,
+      "idleRssEnd": 106835968,
+      "idlePrivateEnd": 116375552,
+      "loadSeconds": 10.234593800000003,
+      "loadCpuSeconds": 1,
+      "loadRssEnd": 110284800,
+      "loadPrivateEnd": 119758848,
+      "latencyMedianMs": 2.8981000000057975,
+      "latencyP95Ms": 3.5751000000018394,
+      "stderrBytes": 6984
+    },
+    {
+      "mode": "after-details-on",
+      "nodeVersion": "24.14.0",
+      "commanderVersion": "0.2.52",
+      "completed": 100,
+      "idleSeconds": 10.238121899999998,
+      "idleCpuSeconds": 0.15625,
+      "idleRssBegin": 150863872,
+      "idleRssEnd": 105168896,
+      "idlePrivateEnd": 114909184,
+      "loadSeconds": 10.24978,
+      "loadCpuSeconds": 1,
+      "loadRssEnd": 109985792,
+      "loadPrivateEnd": 119631872,
+      "latencyMedianMs": 2.8910999999934575,
+      "latencyP95Ms": 3.7347000000008848,
+      "stderrBytes": 14276
+    }
+  ],
+  "candidateActivitySHA256": "6206e39c944b7f222045532dd889402dd79b07403091728df92ecf3b3720a793"
+}

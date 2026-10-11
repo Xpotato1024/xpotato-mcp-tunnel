@@ -2,6 +2,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { instrumentTools } from './activity.mjs';
 
 const profile = process.env.XPOTATO_MCP_PROFILE;
 const entry = process.env.XPOTATO_MCP_COMMANDER_ENTRY;
@@ -21,4 +22,9 @@ for (const name of ['DC_REMOTE_DEVICE', 'LLM01_ALLOW_CHROME_DOWNLOAD', 'CONTROL_
   'OPENAI_API_KEY', 'XPOTATO_MCP_PROFILE', 'XPOTATO_MCP_COMMANDER_ENTRY']) delete process.env[name];
 if (os.homedir() !== profile) throw new Error('Device profile did not resolve');
 if (!process.argv.includes('--no-onboarding')) process.argv.push('--no-onboarding');
+// Same pinned ESM Server class that Commander imports. Observe its public
+// request-handler boundary without consuming/rewriting protocol streams.
+const sdk = path.join(path.dirname(entry), '..', '..', '..', '@modelcontextprotocol', 'sdk', 'dist', 'esm', 'server', 'index.js');
+const { Server } = await import(pathToFileURL(sdk).href);
+instrumentTools(Server, { details: process.argv.includes('--activity-details') });
 await import(pathToFileURL(entry).href);
