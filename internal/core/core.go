@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const Version = "0.2.3"
+const Version = "0.2.4"
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 var tunnelPattern = regexp.MustCompile(`^tunnel_[a-zA-Z0-9_-]+$`)
@@ -23,19 +23,25 @@ var ErrRuntimePinUnsupported = errors.New("このコアで未対応の runtime �
 var ErrCommandDirectoryConflict = errors.New("既存の短縮コマンド保存先を変更できません")
 
 type Device struct {
-	Schema          int      `json:"schemaVersion"`
-	Owner           string   `json:"owner"`
-	Name            string   `json:"name"`
-	Tunnel          string   `json:"tunnelId"`
-	Approved        []string `json:"approvedDirectories"`
-	Credential      string   `json:"credentialRef"`
-	CredentialReady bool     `json:"credentialReady"`
-	ConfigReady     bool     `json:"configReady"`
-	Release         string   `json:"release"`
-	Previous        string   `json:"previousRelease,omitempty"`
-	MCPURL          string   `json:"mcpUrl,omitempty"`
+	ProfileRevision    string   `json:"profileRevision,omitempty"`
+	CredentialRevision string   `json:"credentialRevision,omitempty"`
+	Schema             int      `json:"schemaVersion"`
+	Owner              string   `json:"owner"`
+	Name               string   `json:"name"`
+	Tunnel             string   `json:"tunnelId"`
+	Approved           []string `json:"approvedDirectories"`
+	Credential         string   `json:"credentialRef"`
+	CredentialReady    bool     `json:"credentialReady"`
+	ConfigReady        bool     `json:"configReady"`
+	Release            string   `json:"release"`
+	Previous           string   `json:"previousRelease,omitempty"`
+	MCPURL             string   `json:"mcpUrl,omitempty"`
 }
 type Options struct {
+	EnvFile                                  string
+	reviewed                                 *setupReview
+	replaceScope                             bool
+	previewProfile                           string
 	Home, Device, Tunnel, MCPURL, CommandDir string
 	Allow                                    []string
 	// Set only by the reviewed setup plan, never by a CLI flag.
@@ -159,7 +165,7 @@ func (a App) owned(o Options) (Device, error) {
 	if e = readJSON(deviceFile(o), &d); e != nil {
 		return d, errors.New("prepared device not found; run setup (legacy profiles are not adopted)")
 	}
-	if d.Schema != 3 || d.Name != o.Device || d.Owner != i.Owner || !tunnelPattern.MatchString(d.Tunnel) || len(d.Approved) == 0 || d.Credential != "xpotato-mcp-tunnel:"+digest(d.Owner+"\x00"+o.Home+"\x00"+d.Name+"\x00"+d.Tunnel) {
+	if d.Schema != 3 || d.Name != o.Device || d.Owner != i.Owner || !tunnelPattern.MatchString(d.Tunnel) || len(d.Approved) == 0 || !validRevisions(d) || d.Credential != credentialReference(o.Home, d) {
 		return d, errors.New("device owner/schema/credential reference invalid; existing state was preserved")
 	}
 	for _, p := range d.Approved {
@@ -178,7 +184,7 @@ func checkConfig(o Options, d Device) error {
 	var config struct {
 		Allowed []string `json:"allowedDirectories"`
 	}
-	if readJSON(configFile(o), &config) != nil || len(config.Allowed) == 0 {
+	if readJSON(profileConfig(o.Home, d), &config) != nil || len(config.Allowed) == 0 {
 		return errors.New("Commander must have non-empty absolute allowedDirectories")
 	}
 	for _, root := range config.Allowed {
@@ -194,7 +200,7 @@ func checkConfig(o Options, d Device) error {
 			}
 		}
 		if !approved {
-			return errors.New("Commander scope exceeds setup-approved directories; create a new device for wider access")
+			return errors.New("Commander scope exceeds setup-approved directories; review changes with setup")
 		}
 	}
 	return nil
@@ -211,6 +217,12 @@ func wipe(key []byte) {
 // No secrets are stored in state or passed as command-line arguments. Partial
 // setup is persisted before credential entry, so failures resume locally.
 func (a App) Setup(o Options) (Options, error) {
+	if o.reviewed != nil && !o.reviewed.matches(o) {
+		return o, errors.New("確認後に入力設定が変わりました。Setup で再確認してください")
+	}
+	if o.reviewed != nil && o.reviewed.changed {
+		return a.reconfigure(o)
+	}
 	i, e := a.identity()
 	if e != nil {
 		return o, e
@@ -231,7 +243,7 @@ func (a App) Setup(o Options) (Options, error) {
 			return o, e
 		}
 		if (o.Tunnel != "" && o.Tunnel != d.Tunnel) || (o.MCPURL != "" && o.MCPURL != d.MCPURL) || (len(o.Allow) > 0 && !equal(o.Allow, d.Approved)) {
-			return o, errors.New("setup preserves existing tunnel, endpoint and approved roots; use a new device for changes")
+			return o, errors.New("既存設定の変更には Setup の差分確認と明示的な yes が必要です")
 		}
 	} else {
 		if exists(configFile(o)) {
@@ -272,6 +284,9 @@ func (a App) Setup(o Options) (Options, error) {
 		return o, e
 	}
 	defer unlock()
+	if o.reviewed != nil && !o.reviewed.unchanged(o) {
+		return o, errors.New("確認後に保存済み設定が変わりました。Setup で再確認してください")
+	}
 	// Another setup may have completed between the initial read and lock.
 	if exists(deviceFile(o)) {
 		current, err := a.owned(o)
@@ -294,8 +309,8 @@ func (a App) Setup(o Options) (Options, error) {
 				return o, e
 			}
 		}
-		if !exists(configFile(o)) {
-			if e = atomicJSON(configFile(o), config); e != nil {
+		if !exists(profileConfig(o.Home, d)) {
+			if e = atomicJSON(profileConfig(o.Home, d), config); e != nil {
 				return o, e
 			}
 		}
@@ -371,6 +386,12 @@ func equal(a, b []string) bool {
 	return true
 }
 func (a App) saveKey(o Options, d *Device) error {
+	if e := a.saveKeyRecord(d); e != nil {
+		return e
+	}
+	return atomicJSON(deviceFile(o), d)
+}
+func (a App) saveKeyRecord(d *Device) error {
 	if e := a.Vault.Ready(); e != nil {
 		return e
 	}
@@ -393,7 +414,7 @@ func (a App) saveKey(o Options, d *Device) error {
 		return e
 	}
 	d.CredentialReady = true
-	return atomicJSON(deviceFile(o), d)
+	return nil
 }
 func (a App) Credentials(o Options) error {
 	d, e := a.owned(o)
@@ -436,9 +457,6 @@ func (a App) Start(o Options) (int, error) {
 	if !d.ConfigReady || !d.CredentialReady {
 		return 1, errors.New("setup incomplete; run setup")
 	}
-	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
-		return 1, e
-	}
 	if busy(filepath.Join(directory(o), "maintenance.lock")) {
 		return 1, errors.New("setup/update in progress")
 	}
@@ -449,6 +467,18 @@ func (a App) Start(o Options) (int, error) {
 	defer unlock()
 	if busy(filepath.Join(directory(o), "maintenance.lock")) {
 		return 1, errors.New("setup/update in progress")
+	}
+	// Setup may have completed after the initial read but before start.lock.
+	// Use the latest identity/scope/credential/profile for every launch.
+	d, e = a.owned(o)
+	if e != nil {
+		return 1, e
+	}
+	if !d.ConfigReady || !d.CredentialReady {
+		return 1, errors.New("setup incomplete; run setup")
+	}
+	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
+		return 1, e
 	}
 	tunlock, e := acquire(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock"), d.Owner)
 	if e != nil {

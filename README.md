@@ -1,19 +1,20 @@
 # xpotato-mcp-tunnel
 
-Go コア 0.2.3 は Windows／Linux の日本語 Setup で、必要な情報と恒久保存先を最初に案内します。Tunnel ID と API キーを区別し、複数の許可フォルダーを対話で追加・削除・確認できます。保存前に設定を見直して修正・中断でき、専用資格情報レコードへの保存同意後にキーを非表示で入力します。次回からは `xpotato-tunnel` 一つで起動できます。短いコマンドの配置は別途同意を求め、PATH は変更しません。
+Go コア 0.2.4 は Windows／Linux の日本語 Setup に、非秘密 `.env` 入力と同じ端末名での確認付き設定更新を加えたレビュー候補です。端末名・Tunnel ID・複数の許可フォルダーをファイルから読み、保存前に内容と既存設定との差分を確認します。キーだけは専用資格情報レコードへの保存同意後に非表示で入力します。次回からは `xpotato-tunnel` 一つで起動できます。短いコマンドの配置は別途同意を求め、PATH は変更しません。
 
-0.2.3 はレビュー用の候補です。採用済み main と配布済み artifact は 0.2.2 のままで、0.2.3 の採用・公開リリース・本人の実接続確認はまだ行っていません。
+採用済み main `0d68e9c` と配布済み artifact は 0.2.3 です。0.2.4 は Draft PR のレビュー候補で、採用・公開リリース・本人の実設定への適用はまだ行っていません。
 
 ```text
 go build -trimpath ./cmd/xpotato-tunnel
 xpotato-tunnel setup
+xpotato-tunnel setup --env-file ./setup.env
 ```
 
 本人は private CI のレビュー済み head に対応する Windows／Linux 実行ファイルと SHA256SUMS を取得できます。Go SDK は開発側にだけ必要です。通常ユーザーの Setup で端末名・既存 Tunnel ID・許可範囲・キー保存同意を行い、同じ Tunnel の既存プラグインを再利用します。短いコマンドの保存先が既存 PATH にあれば `xpotato-tunnel`、なければ Setup が表示する短いパスで起動します。
 
 更新は取得したレビュー済み新実行ファイルの `update` を本人が明示実行します。起動で npm/Git の取得やキーの再入力を行わず、稼働接続を再起動しません。操作手順は [Go Setup と起動](docs/setup-once-core.md) を参照してください。
 
-詳細と本人の次のコマンドは [Go Setup と起動](docs/setup-once-core.md) を参照してください。Windows はユーザー Credential Manager、Linux は解除済みのユーザー Secret Service を使用します。Linux headless／ロック中には平文へフォールバックせず停止します。
+推奨ファイル形式と同じ端末の更新手順は [非秘密 .env Setup](docs/setup-env.md) を参照してください。対話入力だけの Setup も維持しています。Windows はユーザー Credential Manager、Linux は解除済みのユーザー Secret Service を使用します。Linux headless／ロック中には平文へフォールバックせず停止します。
 
 **プラグインのアカウント登録は未自動化です。** Setup は Tunnel ID と登録案内を生成します。本人が検証した直接 HTTPS MCP URL を指定した場合は portable plugin bundle も生成しますが、アップロード・有効化は行いません。公式の Tunnel 登録は [ChatGPT Plugins の手順](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels#connect-from-chatgpt) に従います。
 

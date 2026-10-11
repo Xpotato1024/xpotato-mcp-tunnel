@@ -142,12 +142,11 @@ func TestWizardCancellationBeforeAnyMutation(t *testing.T) {
 func TestWizardResumePreservesExistingScopeAndConfig(t *testing.T) {
 	f := prepared(t)
 	before, _ := os.ReadFile(configFile(f.o))
-	f.o.Tunnel, f.o.Allow = "tunnel_different", []string{t.TempDir()}
-	o, out, e := preview(t, f, "dirs", "tunnel", "yes")
+	o, out, e := preview(t, f, "yes")
 	if e != nil {
 		t.Fatal(e)
 	}
-	if o.Tunnel != "tunnel_fixture" || len(o.Allow) != 1 || !strings.Contains(out, "既存の設定") {
+	if o.Tunnel != "tunnel_fixture" || len(o.Allow) != 1 || !strings.Contains(out, "既存の端末") {
 		t.Fatal("existing scope changed")
 	}
 	if _, e := f.app.Setup(o); e != nil {
