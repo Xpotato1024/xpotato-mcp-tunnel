@@ -506,7 +506,7 @@ func (Manager) Run(home string, d core.Device, key []byte) (int, error) {
 		return 1, e
 	}
 	deviceDir := filepath.Join(home, "devices", d.Name)
-	profile := filepath.Join(deviceDir, "profile")
+	profile := core.ProfilePath(home, d)
 	for _, sub := range []string{"Temp", "AppData/Roaming", "AppData/Local", ".config", ".cache", ".local/share"} {
 		if e = os.MkdirAll(filepath.Join(profile, filepath.FromSlash(sub)), 0700); e != nil {
 			return 1, e

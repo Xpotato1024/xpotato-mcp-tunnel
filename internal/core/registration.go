@@ -19,7 +19,23 @@ func validateEndpoint(raw string) error {
 
 // Tunnel integration is a product-specific UI operation. Do not invent a
 // streamable HTTP endpoint from a Tunnel ID or claim account registration.
+func validateRegistration(d Device) error {
+	if d.MCPURL == "" {
+		return nil
+	}
+	if e := validateEndpoint(d.MCPURL); e != nil {
+		return e
+	}
+	if len("xpotato-"+d.Name) > 64 {
+		return errors.New("plugin bundle name exceeds 64 characters; use a shorter device name")
+	}
+	return nil
+}
+
 func Registration(o Options, d Device) error {
+	if e := validateRegistration(d); e != nil {
+		return e
+	}
 	root := filepath.Join(directory(o), "registration")
 	if e := atomicJSON(filepath.Join(root, "tunnel-registration.json"), map[string]any{"schemaVersion": 1, "device": d.Name, "tunnelId": d.Tunnel, "status": "account-registration-not-probed", "url": "https://chatgpt.com/plugins", "steps": []string{"Reuse the existing plugin bound to this same Tunnel ID; do not create a duplicate", "If no plugin exists: start this device's tunnel, add custom MCP server, choose Tunnel and this ID", "For new registration only: review authentication and permissions, then create as a plugin"}}); e != nil {
 		return e
@@ -27,13 +43,7 @@ func Registration(o Options, d Device) error {
 	if d.MCPURL == "" {
 		return nil
 	}
-	if e := validateEndpoint(d.MCPURL); e != nil {
-		return e
-	}
 	name := "xpotato-" + d.Name
-	if len(name) > 64 {
-		return errors.New("plugin bundle name exceeds 64 characters; use a shorter device name")
-	}
 	plugin := map[string]any{"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "name": name, "version": Version, "description": "Owner-controlled Desktop Commander device", "author": map[string]string{"name": "Xpotato"}, "extensions": map[string]any{"com.openai": map[string]any{"interface": map[string]string{"displayName": "Xpotato " + d.Name, "shortDescription": "Desktop Commander device", "developerName": "Xpotato", "category": "Productivity", "defaultPrompt": "Use my approved device directories."}}}}
 	mcp := map[string]any{"$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", "mcpServers": map[string]any{d.Name: map[string]string{"type": "streamable-http", "url": d.MCPURL}}}
 	f, e := os.CreateTemp(root, ".bundle-")

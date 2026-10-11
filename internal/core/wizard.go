@@ -34,7 +34,7 @@ func wizardText(p Prompt, label string) (string, error) {
 
 // PrepareSetup collects only nonsecret options. It does not create files,
 // install a runtime, access the vault, or start/stop processes. Setup rechecks
-// identity, immutable scope and state under its maintenance lock afterwards.
+// identity, reviewed scope and state under its maintenance lock afterwards.
 func (a App) PrepareSetup(o Options, out io.Writer, shortDefault string) (Options, error) {
 	if _, e := a.identity(); e != nil {
 		return o, e
@@ -43,12 +43,20 @@ func (a App) PrepareSetup(o Options, out io.Writer, shortDefault string) (Option
 	fmt.Fprintln(out, "用意するもの: Platform で確認した Tunnel ID、runtime API キー、アクセスを許可する既存フォルダー。")
 	fmt.Fprintln(out, "本人の通常ユーザー端末で実行します。Windows は Credential Manager、Linux はログインセッションの解除済み Secret Service が必要です。")
 	fmt.Fprintln(out, "Tunnel ID は tunnel_ で始まる接続先の識別子です。API キーとは別物です。キーは最後の保存同意の後に非表示で入力します。")
-	fmt.Fprintln(out, "許可したフォルダーとその配下が Commander のアクセス範囲になります。必要な範囲だけを選んでください。")
+	fmt.Fprintln(out, "許可フォルダーは Commander のファイルツールのパス確認に使います。プロセス実行全体を閉じ込める sandbox ではありません。必要な範囲だけを選んでください。")
 	fmt.Fprintln(out, "初回は固定版の実行環境をダウンロードします。Setup 後も使う恒久保存先は次のとおりです。")
 	printLocations(out, o, shortDefault, nil)
 	fmt.Fprintln(out, "入力例: 端末名 work-pc / Tunnel ID tunnel_YOUR_ID / Windows C:\\Work / Linux /home/user/Work")
 	fmt.Fprintln(out, "どの通常入力でも q / cancel / 中断、または Ctrl+C で中断できます。最終確認まではファイルを書きません。")
 	rootsReviewed := false
+	if o.EnvFile != "" {
+		if e := validateEnvRoots(o.Allow); e != nil {
+			return o, e
+		}
+		fmt.Fprintf(out, "非秘密設定ファイル: %s（環境変数へ設定・シェル実行はしません）\n", o.EnvFile)
+		rootsReviewed = true
+	}
+	loadedSelection := ""
 	for {
 		for validateOptions(Options{Home: o.Home, Device: "preview"}) != nil {
 			fmt.Fprintln(out, "保存先は完全な絶対パスで指定してください。引用符・改行などシェルに渡せない文字は使えません。")
@@ -73,10 +81,19 @@ func (a App) PrepareSetup(o Options, out io.Writer, shortDefault string) (Option
 			if e != nil {
 				return o, e
 			}
-			if (o.Tunnel != "" && o.Tunnel != d.Tunnel) || (o.MCPURL != "" && o.MCPURL != d.MCPURL) || (len(o.Allow) > 0 && !equal(o.Allow, d.Approved)) {
-				fmt.Fprintln(out, "この端末名は登録済みです。指定した変更は適用せず、既存の設定を表示します。別の接続や範囲にする場合は確認画面で端末名を変更してください。")
+			selection := o.Home + "\x00" + o.Device
+			if loadedSelection != selection {
+				if o.Tunnel == "" {
+					o.Tunnel = d.Tunnel
+				}
+				if o.MCPURL == "" {
+					o.MCPURL = d.MCPURL
+				}
+				if len(o.Allow) == 0 {
+					o.Allow = append([]string(nil), d.Approved...)
+				}
+				loadedSelection = selection
 			}
-			o.Tunnel, o.MCPURL, o.Allow = d.Tunnel, d.MCPURL, append([]string(nil), d.Approved...)
 			if d.Release != "" {
 				err := a.Runtime.Verify(o.Home, d.Release)
 				if errors.Is(err, ErrRuntimePinUnsupported) {
@@ -85,7 +102,7 @@ func (a App) PrepareSetup(o Options, out io.Writer, shortDefault string) (Option
 					return o, errors.New("保存済み runtime の検証に失敗しました。既存状態は変更していません。doctor で状態を確認してください")
 				}
 			}
-			fmt.Fprintln(out, "既存の端末設定を保持して Setup を再開します。完了済みのキー保存は繰り返しません。")
+			fmt.Fprintln(out, "既存の端末で Setup を再開・更新します。変更差分を確認してから保存します。Tunnel ID が同じなら完了済みキー保存は繰り返しません。")
 		} else {
 			for !tunnelPattern.MatchString(o.Tunnel) {
 				fmt.Fprintln(out, "Platform の Tunnel 設定から ID をコピーしてください。ここに API キーを入力しないでください。")
@@ -108,6 +125,39 @@ func (a App) PrepareSetup(o Options, out io.Writer, shortDefault string) (Option
 		if o.MCPURL != "" {
 			if e := validateEndpoint(o.MCPURL); e != nil {
 				return o, errors.New("--mcp-url は本人が検証した直接の HTTPS MCP endpoint を指定してください。値は表示していません")
+			}
+			if e := validateRegistration(Device{Name: o.Device, MCPURL: o.MCPURL}); e != nil {
+				return o, e
+			}
+		}
+		if existing && !tunnelPattern.MatchString(o.Tunnel) {
+			var e error
+			o.Tunnel, e = wizardText(a.Prompt, "Tunnel ID（tunnel_ で始まる ID）")
+			if e != nil {
+				return o, e
+			}
+			continue
+		}
+		var reviewed *setupReview
+		o.previewProfile = ""
+		if existing {
+			d, e := a.owned(o)
+			if e != nil {
+				return o, e
+			}
+			if d.ConfigReady {
+				if !equal(o.Allow, d.Approved) || o.EnvFile != "" || o.replaceScope {
+					if e = validateEnvRoots(o.Allow); e != nil {
+						return o, e
+					}
+				}
+				reviewed, e = reviewExisting(o, d)
+				if e != nil {
+					return o, e
+				}
+				o.previewProfile = ProfilePath(o.Home, reviewed.next)
+			} else if o.Tunnel != d.Tunnel || !equal(o.Allow, d.Approved) {
+				return o, errors.New("既存の設定作成が未完了です。同じ値で Setup を完了してから変更してください")
 			}
 		}
 		if !validCommandDirectory(o.CommandDir) {
@@ -135,13 +185,16 @@ func (a App) PrepareSetup(o Options, out io.Writer, shortDefault string) (Option
 		fmt.Fprintln(out, "\n保存前の確認（秘密情報は含みません）")
 		fmt.Fprintf(out, "端末名: %s\nTunnel ID: %s\n", o.Device, o.Tunnel)
 		printLocations(out, o, shortDefault, commandPlan)
+		if reviewed != nil {
+			reviewed.print(out)
+		}
 		if o.RefreshRuntime {
 			fmt.Fprintf(out, "実行環境の更新: 確認の yes 後に、このコア %s の固定 runtime を導入・検証し、端末の参照を切り替えます。旧版と設定は保持し、稼働中の接続は再起動しません。\n", Version)
 		}
 		fmt.Fprintln(out, "許可フォルダー（承認範囲）:")
 		printRoots(out, o.Allow)
 		if existing {
-			fmt.Fprintln(out, "既存の Commander 設定をバイト単位で保持します。ここに表示した範囲内への既存の絞り込みも保持します。")
+			fmt.Fprintln(out, "許可フォルダー以外の Commander 設定は保持します。範囲の変更は上の差分で確認します。")
 		} else {
 			shell := "/bin/sh"
 			if runtime.GOOS == "windows" {
@@ -160,6 +213,7 @@ func (a App) PrepareSetup(o Options, out io.Writer, shortDefault string) (Option
 		}
 		switch strings.ToLower(choice) {
 		case "yes", "進む":
+			o.reviewed = reviewed
 			return o, nil
 		case "no", "いいえ":
 			return o, ErrSetupCancelled
@@ -168,17 +222,10 @@ func (a App) PrepareSetup(o Options, out io.Writer, shortDefault string) (Option
 		case "home", "保存先":
 			o.Home, e = wizardText(a.Prompt, "恒久保存先の絶対パス")
 		case "tunnel", "接続先":
-			if existing {
-				fmt.Fprintln(out, "登録済み端末の Tunnel ID は変更できません。device で別の端末名を選んでください。")
-			} else {
-				o.Tunnel = ""
-			}
+			o.Tunnel = ""
 		case "dirs", "フォルダー":
-			if existing {
-				fmt.Fprintln(out, "登録済み端末の承認範囲は変更できません。device で別の端末名を選んでください。")
-			} else {
-				e = a.editRoots(&o, out)
-			}
+			e = a.editRoots(&o, out)
+			o.replaceScope = true
 		case "command", "短縮コマンド":
 			o.CommandDir, e = wizardText(a.Prompt, "短縮コマンドの保存先（空欄で既定／既存の選択）")
 		default:
@@ -197,7 +244,11 @@ func validCommandDirectory(p string) bool {
 func printLocations(out io.Writer, o Options, shortDefault string, commandPlan *CommandPlan) {
 	fmt.Fprintf(out, "恒久保存先: %s\n実行環境: %s\nGo 本体: %s\n起動ラッパー: %s\n", o.Home, filepath.Join(o.Home, "releases"), filepath.Join(o.Home, "core", Version), filepath.Join(o.Home, "bin"))
 	if o.Device != "" {
-		fmt.Fprintf(out, "端末設定: %s\nCommander 設定: %s\n", deviceFile(o), configFile(o))
+		config := configFile(o)
+		if o.previewProfile != "" {
+			config = filepath.Join(o.previewProfile, ".claude-server-commander", "config.json")
+		}
+		fmt.Fprintf(out, "端末設定: %s\nCommander 設定: %s\n", deviceFile(o), config)
 	} else {
 		fmt.Fprintf(out, "端末設定と Commander 設定: %s 内の端末別フォルダー\n", filepath.Join(o.Home, "devices"))
 	}

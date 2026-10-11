@@ -17,13 +17,15 @@ import (
 )
 
 const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
-  setup [--device NAME] [--tunnel-id ID] [--allow ABSOLUTE_DIR ...]
+  setup [--env-file PATH] [--device NAME] [--tunnel-id ID] [--allow ABSOLUTE_DIR ...]
   start | doctor | update | rollback | credentials | plugin
   --home ABSOLUTE_DIR  (all commands)
   --device NAME       (omit to use setup's default device)
   --mcp-url HTTPS_URL (setup only; owner-verified direct MCP endpoint, optional)
   --command-dir DIR  (setup only; optional short command location, local consent)
 setup は日本語ウィザードで設定・複数の許可フォルダー・恒久保存先を確認します。
+--env-file は非秘密の DEVICE / TUNNEL_ID / ALLOW_DIR_1..N を読み、保存前に確認します。
+API キーを .env に保存・読み込みする機能はありません。
 Tunnel ID と API キーは別物です。API キーは保存同意の後、非表示で入力します。
 start は保存済みキーを使用します。引数なしは start です。
 Tunnel のプラグイン登録は本人が ChatGPT Plugins UI で行います。
@@ -107,6 +109,7 @@ func parse(args []string) (string, core.Options, error) {
 	f := flag.NewFlagSet(command, flag.ContinueOnError)
 	f.SetOutput(new(strings.Builder))
 	f.StringVar(&o.Home, "home", "", "home")
+	f.StringVar(&o.EnvFile, "env-file", "", "nonsecret setup file")
 	f.StringVar(&o.Device, "device", "", "device")
 	f.StringVar(&o.Tunnel, "tunnel-id", "", "tunnel")
 	f.StringVar(&o.MCPURL, "mcp-url", "", "endpoint")
@@ -117,6 +120,25 @@ func parse(args []string) (string, core.Options, error) {
 		return "", o, errors.New("invalid options; use help (keys are accepted only by hidden terminal input)")
 	}
 	o.Allow = allow
+	envSpecified, conflict := false, false
+	f.Visit(func(option *flag.Flag) {
+		if option.Name == "env-file" {
+			envSpecified = true
+		}
+		if option.Name == "device" || option.Name == "tunnel-id" || option.Name == "allow" {
+			conflict = true
+		}
+	})
+	if envSpecified {
+		if command != "setup" || conflict || o.EnvFile == "" {
+			return "", o, errors.New("--env-file は setup 専用で、--device / --tunnel-id / --allow と併用できません")
+		}
+		env, e := core.ReadSetupEnv(o.EnvFile)
+		if e != nil {
+			return "", o, e
+		}
+		o.Device, o.Tunnel, o.Allow = env.Device, env.Tunnel, env.Allow
+	}
 	if command != "setup" && (o.Tunnel != "" || o.MCPURL != "" || len(o.Allow) > 0 || o.CommandDir != "") {
 		return "", o, errors.New("--tunnel-id/--allow/--mcp-url are setup-only")
 	}
