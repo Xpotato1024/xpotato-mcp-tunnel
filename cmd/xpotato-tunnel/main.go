@@ -21,6 +21,7 @@ const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
   start | doctor | update | rollback | credentials | plugin
   --home ABSOLUTE_DIR  (all commands)
   --device NAME       (omit to use setup's default device)
+  --activity-details  (start only; conservative argument display on stderr)
   --mcp-url HTTPS_URL (setup only; owner-verified direct MCP endpoint, optional)
   --command-dir DIR  (setup only; optional short command location, local consent)
 setup は日本語ウィザードで設定・複数の許可フォルダー・恒久保存先を確認します。
@@ -50,7 +51,7 @@ func (terminal) Text(label string) (string, error) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return "", errors.New("Setup は本人の対話端末で実行してください")
 	}
-	fmt.Print(label + ": ")
+	writeInputPrompt(os.Stdout, label)
 	line, e := textInput.ReadString('\n')
 	if e != nil {
 		return "", core.ErrSetupCancelled
@@ -81,7 +82,7 @@ func (terminal) Key() ([]byte, error) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return nil, errors.New("interactive terminal required")
 	}
-	fmt.Print("Runtime API キー（非表示入力、Ctrl+C で中断。Tunnel ID は入力しないでください）: ")
+	writeInputPrompt(os.Stdout, "Runtime API キー（非表示入力、Ctrl+C で中断。Tunnel ID は入力しないでください）")
 	key, e := readKey(int(os.Stdin.Fd()))
 	fmt.Println()
 	return key, e
@@ -114,12 +115,16 @@ func parse(args []string) (string, core.Options, error) {
 	f.StringVar(&o.Tunnel, "tunnel-id", "", "tunnel")
 	f.StringVar(&o.MCPURL, "mcp-url", "", "endpoint")
 	f.StringVar(&o.CommandDir, "command-dir", "", "short command directory")
+	f.BoolVar(&o.ActivityDetails, "activity-details", false, "explicit tool argument display")
 	var allow repeated
 	f.Var(&allow, "allow", "root")
 	if e := f.Parse(args); e != nil || f.NArg() != 0 {
 		return "", o, errors.New("invalid options; use help (keys are accepted only by hidden terminal input)")
 	}
 	o.Allow = allow
+	if o.ActivityDetails && command != "start" {
+		return "", o, errors.New("--activity-details is start-only")
+	}
 	envSpecified, conflict := false, false
 	f.Visit(func(option *flag.Flag) {
 		if option.Name == "env-file" {
@@ -171,7 +176,16 @@ func run(args []string) (int, error) {
 		fmt.Println(core.Version)
 		return 0, nil
 	}
-	a := core.App{Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: managed.Manager{}, InstallCommand: managed.InstallCommand}
+	runtimeManager := managed.Manager{ActivityDetails: o.ActivityDetails}
+	var report func(string)
+	if command == "setup" {
+		runtimeManager.Progress = func(message string) { fmt.Fprintln(os.Stdout, message) }
+	}
+	if command == "start" {
+		report = func(message string) { fmt.Fprintln(os.Stderr, message) }
+		runtimeManager.Progress = report
+	}
+	a := core.App{Progress: report, Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: runtimeManager, InstallCommand: managed.InstallCommand}
 	if command == "setup" {
 		a.PreviewCommand = managed.PreviewCommand
 		userHome, err := os.UserHomeDir()
