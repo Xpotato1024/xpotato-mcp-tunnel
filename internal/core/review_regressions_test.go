@@ -10,21 +10,18 @@ import (
 type notReadyPrompt struct{ fakePrompt }
 
 func (*notReadyPrompt) Consent(string) (bool, error) { return false, nil }
-func TestCutoverReadinessBeforeSavedKeyAccess(t *testing.T) {
+func TestLegacyCutoverFlagDoesNotGateSetupOrStart(t *testing.T) {
 	f := prepared(t)
-	var d Device
+	var d map[string]any
 	readJSON(deviceFile(f.o), &d)
-	d.CutoverReady = false
+	d["cutoverReady"] = false // Older schema-3 state remains compatible.
 	atomicJSON(deviceFile(f.o), d)
-	if _, e := f.app.Start(f.o); e == nil {
-		t.Fatal("unconfirmed cutover started")
-	}
-	if f.v.loads != 0 {
-		t.Fatal("key read before readiness")
-	}
 	f.app.Prompt = &notReadyPrompt{}
-	if _, e := f.app.Setup(f.o); e == nil {
-		t.Fatal("readiness denial ignored")
+	if _, e := f.app.Setup(f.o); e != nil {
+		t.Fatal(e)
+	}
+	if code, e := f.app.Start(f.o); e != nil || code != 42 {
+		t.Fatal("legacy flag gated start", e)
 	}
 	if f.v.saves != 1 {
 		t.Fatal("existing credential replaced")

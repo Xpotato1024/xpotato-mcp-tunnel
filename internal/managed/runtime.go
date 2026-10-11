@@ -395,7 +395,7 @@ func (Manager) Verify(home, id string) error {
 		return e
 	}
 	if id != releaseID(m) {
-		return errors.New("runtime pin not supported by this core; use matching core version")
+		return core.ErrRuntimePinUnsupported
 	}
 	return verifyDirectory(filepath.Join(home, "releases", id), m)
 }

@@ -43,9 +43,6 @@ type fakePrompt struct {
 
 func (p *fakePrompt) Text(string) (string, error) { return "", errors.New("unexpected text prompt") }
 func (p *fakePrompt) Consent(label string) (bool, error) {
-	if strings.Contains(label, "previous launcher") {
-		return true, nil
-	}
 	p.consents++
 	return p.yes, nil
 }

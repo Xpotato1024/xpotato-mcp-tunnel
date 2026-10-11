@@ -49,6 +49,39 @@ func validateCommandPath(p string) error {
 	}
 	return nil
 }
+
+// Preview reads only owner-checked nonsecret installation metadata. It does
+// not install anything, ask for consent, or access credentials.
+func PreviewCommand(home, requested string) (core.CommandPlan, error) {
+	r, e := readCommandRecord(home)
+	if e != nil {
+		return core.CommandPlan{}, e
+	}
+	if requested != "" && r.Directory != "" && requested != r.Directory {
+		return core.CommandPlan{}, core.ErrCommandDirectoryConflict
+	}
+	if r.Directory != "" {
+		if e = validateCommandPath(r.Directory); e != nil {
+			return core.CommandPlan{}, e
+		}
+		return core.CommandPlan{Directory: r.Directory}, nil
+	}
+	if r.Decided && requested == "" {
+		return core.CommandPlan{}, nil
+	}
+	dir := requested
+	if dir == "" {
+		h, err := os.UserHomeDir()
+		if err != nil {
+			return core.CommandPlan{}, err
+		}
+		dir = filepath.Join(h, ".local", "bin")
+	}
+	if e = validateCommandPath(dir); e != nil {
+		return core.CommandPlan{}, e
+	}
+	return core.CommandPlan{Directory: dir, ConsentRequired: true}, nil
+}
 func shimFiles(home, dest, dir string) map[string][]byte {
 	if runtime.GOOS == "windows" {
 		return map[string][]byte{filepath.Join(dir, "xpotato-tunnel.ps1"): []byte("& '" + strings.ReplaceAll(dest, "'", "''") + "' @args --home '" + strings.ReplaceAll(home, "'", "''") + "'\r\nexit $LASTEXITCODE\r\n"), filepath.Join(dir, "xpotato-tunnel.cmd"): []byte("@echo off\r\n\"" + dest + "\" %* --home \"" + home + "\"\r\nexit /b %errorlevel%\r\n")}
@@ -65,7 +98,7 @@ func SetupCommand(home, requested string, prompt core.Prompt) error {
 		return e
 	}
 	if requested != "" && r.Directory != "" && requested != r.Directory {
-		return errors.New("existing short command directory preserved; use the previously selected directory")
+		return core.ErrCommandDirectoryConflict
 	}
 	if !r.Decided || (requested != "" && r.Directory == "") {
 		dir := requested
@@ -79,7 +112,7 @@ func SetupCommand(home, requested string, prompt core.Prompt) error {
 		if e = validateCommandPath(dir); e != nil {
 			return e
 		}
-		yes, e := prompt.Consent("Install short command xpotato-tunnel in '" + dir + "'? PATH stays unchanged; type yes")
+		yes, e := prompt.Consent("短縮コマンド xpotato-tunnel を「" + dir + "」に保存しますか？ PATH は変更しません。no の場合も恒久保存先の bin から起動できます [yes / no]")
 		if e != nil {
 			return e
 		}

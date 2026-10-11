@@ -2,6 +2,7 @@ package managed
 
 import (
 	"errors"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,42 @@ import (
 type commandPrompt struct {
 	yes   bool
 	calls int
+}
+
+func TestCommandPreviewPreservesExistingSelectionBeforeSetup(t *testing.T) {
+	home, bin, changed := t.TempDir(), t.TempDir(), t.TempDir()
+	p := &commandPrompt{yes: true}
+	if e := SetupCommand(home, bin, p); e != nil {
+		t.Fatal(e)
+	}
+	before, _ := os.ReadFile(filepath.Join(home, "command-install.json"))
+	plan, e := PreviewCommand(home, "")
+	if e != nil || plan.Directory != bin || plan.ConsentRequired {
+		t.Fatal("existing selection not shown", e)
+	}
+	if _, e = PreviewCommand(home, changed); !errors.Is(e, core.ErrCommandDirectoryConflict) {
+		t.Fatal("changed destination accepted", e)
+	}
+	after, _ := os.ReadFile(filepath.Join(home, "command-install.json"))
+	if string(before) != string(after) || p.calls != 1 {
+		t.Fatal("preview mutated selection or asked consent")
+	}
+}
+
+func TestCommandPreviewNewAndDeclinedInstallation(t *testing.T) {
+	home, bin := t.TempDir(), t.TempDir()
+	plan, e := PreviewCommand(home, bin)
+	if e != nil || plan.Directory != bin || !plan.ConsentRequired {
+		t.Fatal("new candidate missing", e)
+	}
+	p := &commandPrompt{yes: false}
+	if e := SetupCommand(home, bin, p); e != nil {
+		t.Fatal(e)
+	}
+	plan, e = PreviewCommand(home, "")
+	if e != nil || plan.Directory != "" || plan.ConsentRequired {
+		t.Fatal("declined location not preserved", e)
+	}
 }
 
 func (*commandPrompt) Text(string) (string, error) { return "", errors.New("unexpected text") }
