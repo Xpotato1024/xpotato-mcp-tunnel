@@ -14,10 +14,13 @@ import (
 	"strings"
 )
 
-const Version = "0.2.2"
+const Version = "0.2.3"
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 var tunnelPattern = regexp.MustCompile(`^tunnel_[a-zA-Z0-9_-]+$`)
+
+var ErrRuntimePinUnsupported = errors.New("このコアで未対応の runtime 版です")
+var ErrCommandDirectoryConflict = errors.New("既存の短縮コマンド保存先を変更できません")
 
 type Device struct {
 	Schema          int      `json:"schemaVersion"`
@@ -28,7 +31,6 @@ type Device struct {
 	Credential      string   `json:"credentialRef"`
 	CredentialReady bool     `json:"credentialReady"`
 	ConfigReady     bool     `json:"configReady"`
-	CutoverReady    bool     `json:"cutoverReady"`
 	Release         string   `json:"release"`
 	Previous        string   `json:"previousRelease,omitempty"`
 	MCPURL          string   `json:"mcpUrl,omitempty"`
@@ -36,6 +38,12 @@ type Device struct {
 type Options struct {
 	Home, Device, Tunnel, MCPURL, CommandDir string
 	Allow                                    []string
+	// Set only by the reviewed setup plan, never by a CLI flag.
+	RefreshRuntime bool
+}
+type CommandPlan struct {
+	Directory       string
+	ConsentRequired bool
 }
 type Prompt interface {
 	Text(string) (string, error)
@@ -53,6 +61,7 @@ type App struct {
 	Prompt         Prompt
 	Runtime        Runtime
 	InstallCommand func(string) error
+	PreviewCommand func(string, string) (CommandPlan, error)
 }
 
 func DefaultHome() (string, error) {
@@ -298,30 +307,33 @@ func (a App) Setup(o Options) (Options, error) {
 			return o, e
 		}
 	}
-	if d.Release == "" {
-		d.Release, e = a.Runtime.Install(o.Home)
+	pendingRelease := ""
+	if d.Release == "" || o.RefreshRuntime {
+		next, err := a.Runtime.Install(o.Home)
+		e = err
 		if e != nil {
 			return o, e
 		}
-		if e = atomicJSON(deviceFile(o), d); e != nil {
+		if e = a.Runtime.Verify(o.Home, next); e != nil {
 			return o, e
 		}
+		if d.Release != "" && d.Release != next {
+			// Keep the old entry point usable until the new core and shims
+			// install successfully, matching the explicit Update ordering.
+			pendingRelease = next
+		} else {
+			d.Release = next
+			if e = atomicJSON(deviceFile(o), d); e != nil {
+				return o, e
+			}
+		}
 	}
-	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
+	verifyRelease := d.Release
+	if pendingRelease != "" {
+		verifyRelease = pendingRelease
+	}
+	if e = a.Runtime.Verify(o.Home, verifyRelease); e != nil {
 		return o, e
-	}
-	if !d.CutoverReady {
-		yes, err := a.Prompt.Consent("Confirm any previous launcher for this Tunnel ID has been stopped by you; type yes")
-		if err != nil {
-			return o, err
-		}
-		if !yes {
-			return o, errors.New("cutover not ready; existing clients were not stopped by this program")
-		}
-		d.CutoverReady = true
-		if e = atomicJSON(deviceFile(o), d); e != nil {
-			return o, e
-		}
 	}
 	if !d.CredentialReady {
 		if e = a.saveKey(o, &d); e != nil {
@@ -333,6 +345,12 @@ func (a App) Setup(o Options) (Options, error) {
 	}
 	if a.InstallCommand != nil {
 		if e = a.InstallCommand(o.Home); e != nil {
+			return o, e
+		}
+	}
+	if pendingRelease != "" {
+		d.Previous, d.Release = d.Release, pendingRelease
+		if e = atomicJSON(deviceFile(o), d); e != nil {
 			return o, e
 		}
 	}
@@ -356,20 +374,20 @@ func (a App) saveKey(o Options, d *Device) error {
 	if e := a.Vault.Ready(); e != nil {
 		return e
 	}
-	yes, e := a.Prompt.Consent("Save/replace only device '" + d.Name + "' runtime key in your user credential store? Type yes")
+	yes, e := a.Prompt.Consent("端末「" + d.Name + "」専用の runtime API キーを、本人の OS 資格情報ストアの一レコードに保存／置換します。他の資格情報は変更しません。保存に同意しますか？ [yes / no]")
 	if e != nil {
 		return e
 	}
 	if !yes {
-		return errors.New("credential save declined; setup state kept for retry")
+		return errors.New("キーの保存を中断しました。途中の設定は保持され、同じ setup で再開できます")
 	}
 	key, e := a.Prompt.Key()
 	defer wipe(key)
 	if e != nil {
-		return errors.New("masked key input cancelled or unavailable")
+		return errors.New("非表示のキー入力を中断したか、入力端末を利用できません")
 	}
 	if !validKey(key) {
-		return errors.New("runtime key input invalid")
+		return errors.New("キー入力が無効です。表示・保存はしていません。同じ setup で再入力できます")
 	}
 	if e = a.Vault.Save(d.Credential, key); e != nil {
 		return e
@@ -415,7 +433,7 @@ func (a App) Start(o Options) (int, error) {
 	if e != nil {
 		return 1, e
 	}
-	if !d.ConfigReady || !d.CredentialReady || !d.CutoverReady {
+	if !d.ConfigReady || !d.CredentialReady {
 		return 1, errors.New("setup incomplete; run setup")
 	}
 	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
@@ -502,7 +520,7 @@ func (a App) Doctor(o Options) (map[string]any, error) {
 			integrity = "failed"
 		}
 	}
-	return map[string]any{"integrity": integrity, "credentials": "not-read", "connection": "not-probed", "credentialConfigured": d.CredentialReady, "cutoverReadiness": "owner-asserted-not-probed", "cutoverReady": d.CutoverReady, "pluginAccountRegistration": "not-probed", "release": d.Release, "locks": map[string]bool{"start": busy(filepath.Join(directory(o), "start.lock")), "maintenance": busy(filepath.Join(directory(o), "maintenance.lock")), "tunnel": busy(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock")), "install": busy(filepath.Join(o.Home, "releases", "install.lock"))}}, nil
+	return map[string]any{"integrity": integrity, "credentials": "not-read", "connection": "not-probed", "credentialConfigured": d.CredentialReady, "pluginAccountRegistration": "not-probed", "release": d.Release, "locks": map[string]bool{"start": busy(filepath.Join(directory(o), "start.lock")), "maintenance": busy(filepath.Join(directory(o), "maintenance.lock")), "tunnel": busy(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock")), "install": busy(filepath.Join(o.Home, "releases", "install.lock"))}}, nil
 }
 func (a App) DoctorHome(home string) (map[string]any, error) {
 	if _, e := a.identity(); e != nil {

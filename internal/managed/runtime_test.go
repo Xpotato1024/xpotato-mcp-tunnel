@@ -3,6 +3,7 @@ package managed
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
 	"os"
 	"os/exec"
@@ -10,6 +11,20 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestOlderRuntimePinRequiresReviewedRefresh(t *testing.T) {
+	m, e := manifest()
+	if e != nil {
+		t.Fatal(e)
+	}
+	old := strings.Replace(releaseID(m), "core-"+core.Version+"-", "core-0.2.2-", 1)
+	if e = (Manager{}).Verify(t.TempDir(), old); !errors.Is(e, core.ErrRuntimePinUnsupported) {
+		t.Fatal("older pin was implicitly adopted", e)
+	}
+	if e = (Manager{}).Verify(t.TempDir(), releaseID(m)); e == nil || errors.Is(e, core.ErrRuntimePinUnsupported) {
+		t.Fatal("current runtime bypassed integrity checks", e)
+	}
+}
 
 func TestNativeArgumentPreservesQuotedSpaces(t *testing.T) {
 	if os.Getenv("XPOTATO_TEST_HELPER") == "1" {

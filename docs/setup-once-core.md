@@ -1,6 +1,8 @@
 # Go コア: Setup と起動
 
-0.2.2 の入口は `cmd/xpotato-tunnel` です。Go を選んだ理由は、単体実行ファイルを配布でき、両 OS の資格情報・ファイルロック・子プロセス API を分離できるためです。PS/cmd/sh は保存済みの Go 実行ファイルへ引数を渡すだけです。Desktop Commander の実行だけに固定版 Node を使用します。旧 Node CLI と 30 テストは保持しています。
+0.2.3 の入口は `cmd/xpotato-tunnel` です。Go を選んだ理由は、単体実行ファイルを配布でき、両 OS の資格情報・ファイルロック・子プロセス API を分離できるためです。PS/cmd/sh は保存済みの Go 実行ファイルへ引数を渡すだけです。Desktop Commander の実行だけに固定版 Node を使用します。旧 Node CLI と 30 テストは保持しています。
+
+0.2.3 はレビュー用の候補で、採用・公開リリースはまだ行っていません。採用済み main／配布済み artifact の 0.2.2 とは分けて扱ってください。以下は新ウィザードの仕様です。本人による実キー保存・実接続はこの検証では行いません。
 
 ## 本人による導入
 
@@ -9,8 +11,8 @@ CI の artifact ZIP 内には OS 別の tar.gz が入っています。Linux は
 PR の Windows／Linux CI は、実行ファイル・SHA256SUMS・build-info・手順を private review artifact にまとめます。本人はレビュー済み head に対応する artifact を取得し、チェックサムを確認して通常ユーザーで実行します。本人の端末へ Go SDK を導入する必要はありません。公開リリースやアカウント上のプラグイン登録は実施しません。
 
 ```powershell
-# Windows: C:\Work は事前に本人が作成した、許可するディレクトリ。
-.\xpotato-tunnel.exe setup --device llm-01 --tunnel-id tunnel_YOUR_ID --allow 'C:\Work'
+# Windows: 本人の通常権限の対話端末で実行する。
+.\xpotato-tunnel.exe setup
 
 # 短いコマンドの保存に同意し、保存先が既存 PATH にある場合。
 xpotato-tunnel
@@ -20,7 +22,7 @@ xpotato-tunnel
 
 ```sh
 # Linux: ログインユーザーの Secret Service が起動・解除されていること。
-./xpotato-tunnel setup --device llm-02 --tunnel-id tunnel_YOUR_ID --allow "$HOME/Work"
+./xpotato-tunnel setup
 # ~/.local/bin が既存 PATH にある場合。
 xpotato-tunnel
 # PATH にない場合。
@@ -29,9 +31,24 @@ xpotato-tunnel
 
 Linux で絶対パスの `XDG_DATA_HOME` を設定している場合、保存先はその配下です。両 OS とも `--home ABSOLUTE_DIR` で保存先を指定できます。Setup は本人の別の同意で `~/.local/bin` に短いコマンドを置けます。`--command-dir ABSOLUTE_DIR` で別の既存ユーザー用 bin も選べます。PATH、PowerShell 実行ポリシー、シェル設定、サービスは変更しません。保存先の判断と短いコマンドの同意は記録し、再 Setup で再質問しません。既存の他のコマンドや利用者が変更したラッパーは上書きしません。
 
-既存 launcher が同じ Tunnel ID で動いているかは、秘密のプロセス引数を読んで調べません。Setup は本人に旧 launcher を停止済みであることの明示確認を求め、未確認の profile は Start をキー取得前に拒否します。これは本人の申告であり、旧プロセスを検査・停止したという意味ではありません。別保存先・別ホスト・任意の外部クライアントは制御できません。
+Setup に旧 launcher の停止確認・自動検出はありません。通常の同一保存先内の端末単位・Tunnel ID 単位の OS 起動ロックを維持します。別保存先・別ホスト・外部クライアントはこのロックの対象外です。
 
-引数を省略して `setup` を実行すると端末名、Tunnel ID、許可ディレクトリを尋ねます。複数ルートは `--allow` を繰り返します。保存同意で `yes` を入力した後に、runtime API キーを非表示入力します。コマンド引数や JSON にキーを入れません。保存先はこのアプリ・所有者・保存場所・端末・Tunnel に対応する一つのレコードです。エージェントによる実際の保存や取得は実施していません。
+## 日本語ウィザードの進め方
+
+1. 最初に必要な情報と恒久保存先を確認します。Windows の既定保存先は `%USERPROFILE%\AppData\Local\xpotato-mcp-tunnel-v2`、Linux は `$XDG_DATA_HOME/xpotato-mcp-tunnel-v2`（絶対パスが設定されている場合）、それ以外は `~/.local/share/xpotato-mcp-tunnel-v2` です。本体は `core/<version>`、固定 runtime は `releases`、起動ラッパーは `bin`、端末別設定は `devices/<端末名>` に保存します。
+2. 端末名を入力します。例は `work-pc`。英小文字・数字・ハイフンを使います。
+3. Platform の Tunnel 設定から `tunnel_` で始まる Tunnel ID をコピーします。API キーとは別物です。この通常入力欄にキーを貼り付けないでください。
+4. 許可フォルダーを `add` で一つずつ追加します。例は Windows `C:\Work`、Linux `/home/user/Work`。既存の絶対パスが必要です。空白を含むパスも入力でき、外側の引用符は不要です。`remove` と一覧の番号で削除、`review` で確認、`done` で確定します。空の一覧や無効なパスは確定できず、再入力できます。
+5. 保存前の確認画面で端末名、Tunnel ID、許可範囲、Commander の初期設定、保存先を確認します。`device`、`tunnel`、`dirs`、`home`、`command` で修正し、`yes` で保存処理へ進みます。既存端末は設定を保持して再開し、Tunnel ID・承認範囲を変更するには別の端末名を選びます。短縮コマンド先が既に選択済みの場合は、違う指定を適用せず、実際の保存先を確認画面に表示します。既存の配置辞退も維持します。
+6. 固定 runtime の導入後、本人の OS 資格情報ストアの専用一レコードへの保存に別途同意します。同意した場合にだけ runtime API キーを非表示で入力します。キーは引数・設定 JSON・確認画面・ログに出しません。その後、任意の短縮コマンドの保存にも別の同意を求めます。
+
+通常入力中は `q` / `cancel` / `中断`、確認画面では `no`、非表示キー入力中は Ctrl+C で中断できます。最終確認前はファイルも資格情報も書きません。最終確認後に中断・失敗した場合は途中の設定を保持し、同じ `setup` で再開します。完了済みのキー保存は繰り返しません。OS 保管庫への保存同意に `no` と答えた場合も同様です。
+
+旧コア版の runtime が選択されている既存端末では、確認画面にこのコアの固定 runtime への更新計画を表示します。`yes` 後に新 runtime を導入・検証し、本体／shim の導入に成功してから参照を切り替え、旧 runtime と設定を保持します。稼働中の接続は再起動しません。保存前の中断、新 runtime の検証失敗、本体／shim の導入失敗では旧参照を維持します。現在版の runtime 改変による検証失敗を、この更新分岐で暗黙に採用することはありません。同じ保存先に複数の旧版端末設定がある場合、共有コマンドを更新した後も、他の端末では `setup --device その端末名` で確認付き更新を行ってから新コアで起動します。旧コア本体は保持します。
+
+`--device`、`--tunnel-id`、`--allow` の指定で入力値を事前設定できます。`--allow` は繰り返し指定でき、対話の追加・削除・確認も利用できます。API キーを受け取る引数はありません。新規 Commander の初期値は Windows `powershell.exe`／Linux `/bin/sh`、読み取り上限 100 行、書き込み上限 50 行、telemetry 無効です。禁止コマンドは `shutdown, reboot, format, diskpart, netsh, runas, takeown, reg, sc` です。
+
+資格情報の保存先はこのアプリ・所有者・保存場所・端末・Tunnel に対応する一つのレコードです。エージェントによる実際の保存や取得は実施していません。
 
 ## OS ごとの資格情報
 
@@ -42,7 +59,7 @@ Linux で絶対パスの `XDG_DATA_HOME` を設定している場合、保存先
 
 Linux ではキーリングの作成、サービスの自動起動、Unlock/Prompt 呼び出しを行いません。未導入、セッションなし、ロック中、レコードなしを区別して停止し、平文ファイルにフォールバックしません。鍵の転送は Secret Service の `plain` session をユーザー Unix IPC 上で使います。headless 環境で無条件に無人起動できる設計ではありません。Windows の本物の Vault と Linux デスクトップの本物のキーリングは、本人の受け入れ確認が必要です。
 
-Start は入力を要求しません。先に本人・非昇格・切替準備・許可範囲・runtime 整合性を確認し、二重起動ロックを取ってからキーを取得します。Tunnel 子プロセスには必要な OS 環境だけを渡し、接続先を `https://api.openai.com` に明示固定します。継承された Tunnel/MCP 設定・接続先・認証・TLS・proxy 上書きは使わず、設定検索先と作業場所も新しい隔離 run directory にします。明示的な proxy/mTLS 対応は別途設計が必要です。
+Start は入力を要求しません。先に本人・非昇格・Setup 完了・許可範囲・runtime 整合性を確認し、二重起動ロックを取ってからキーを取得します。Tunnel 子プロセスには必要な OS 環境だけを渡し、接続先を `https://api.openai.com` に明示固定します。継承された Tunnel/MCP 設定・接続先・認証・TLS・proxy 上書きは使わず、設定検索先と作業場所も新しい隔離 run directory にします。明示的な proxy/mTLS 対応は別途設計が必要です。
 
 キーは Tunnel 子プロセスの環境へ渡し、Desktop Commander の import 前に取り除きます。Go の byte buffer は消去しますが、OS/Go の内部コピーや同じユーザー権限からの完全な秘匿は保証しません。終了時は Windows の専用 process group に CTRL_BREAK、Linux の専用 process group に SIGTERM を送り、最大 5 秒待った後に、この起動だけの Windows Job Object／Linux process group を回収します。Windows は launcher 強制終了時も Job Object が子孫を終了させます。Linux で意図的に別 session/group へ脱出したプロセスは回収対象外です。
 
@@ -63,11 +80,11 @@ Setup は途中状態を保持します。保存を断ったり、ネットワ�
 | `rollback` | 保存済みの前 runtime へ参照を戻す。現コアが認識する版に限る |
 | `plugin` | 登録用情報／指定済み直接 MCP endpoint の bundle を再生成 |
 
-今回の固定版は Go コア 0.2.2、Node 24.14.0、Tunnel runtime 0.0.16、Desktop Commander 0.2.52 です。npm はレビュー済み `package-lock.json` の `ci --ignore-scripts` で全推移依存を固定します。ripgrep 1.18.0 と各 OS 用 optional binary package も lock に含み、ホストの rg を使わない機能検索で検証します。Chrome の自動取得は再有効化しません。
+今回の固定版は Go コア 0.2.3、Node 24.14.0、Tunnel runtime 0.0.16、Desktop Commander 0.2.52 です。npm はレビュー済み `package-lock.json` の `ci --ignore-scripts` で全推移依存を固定します。ripgrep 1.18.0 と各 OS 用 optional binary package も lock に含み、ホストの rg を使わない機能検索で検証します。Chrome の自動取得は再有効化しません。
 
 更新は、取得したレビュー済み新パッケージの `./xpotato-tunnel update`（Windows は `.\xpotato-tunnel.exe update`）を本人が明示実行します。コア、固定 runtime、同意済みの短いコマンドを切り替え、稼働中の接続は再起動しません。Start で npm/Git／パッケージ取得を行わず、背景の自動更新も行いません。実行ファイルは検証済みの同一ディレクトリ stage から atomic rename し、ラッパーの途中更新は intent を使って同じ update の再実行で再開します。旧版と設定は保持します。同じコア版の異なるバイナリは上書きせず停止します。
 
-現行 0.2.2 に別 runtime 版は同梱していないため、初回 `rollback` には前版がありません。runtime rollback は、そのコアが認識する版に限ります。
+現行 0.2.3 に別 runtime 版は同梱していないため、初回 `rollback` には前版がありません。runtime rollback は、そのコアが認識する版に限ります。
 
 二重起動は同じ保存先の端末単位と Tunnel ID 単位で防止します。maintenance/install/start は OS ファイルロックを使い、中断で OS が解放します。本人の OS 所有権と記録所有者を確認して再利用し、ファイルを削除・置換して別の生存中 holder を邪魔しません。lock の所有者メタデータも atomic rename で保存します。旧形式や他所有者の lock は自動採用しません。
 
@@ -90,6 +107,10 @@ npm test
 ```
 
 Go の通常テストは fake Vault、合成キー、一時 profile を使用します。実際の Setup 子プロセスの導入中／キー待ち／コア stage コピーを終了させて再開を検証し、親・孫の終了回収では無関係の sentinel が生存することを確認します。生成 PS/cmd/sh を実行し、空白を含む引数と終了コード転送も検証します。悪意の ambient 設定は、HTTP を行わない runtime 代替 exe の実 argv/env で除去を確認します。
+
+日本語ウィザードのテストは Windows／Linux の実ファイルシステム上で、新規 Setup、複数フォルダーの追加・削除・一覧確認、引用符付きパス、重複・不存在・相対パス・ファイルの拒否、端末名／Tunnel ID／保存先の再入力、最終確認からの修正、中断、既存設定の保持を検証します。確認画面の生成が Vault・runtime・ファイル書き込みを行わないことも確認します。旧 `cutoverReady` フィールドは Start の条件に使いません。端末の通常入力は後続の貼り付け行を失わず、非表示キー入力を先読みしません。
+
+旧コアの途中 Setup 再開は更新計画の明示・確定後の検証・旧 pin 保持を検証し、短縮コマンド先の不一致は資格情報保存前に訂正します。キー保存後の短縮コマンド同意で中断した場合も、保存済み専用レコードを保持して再開し、キーを再入力しないことを検証します。
 
 Linux CI は専用の一時 D-Bus daemon と fake Secret Service を使い、本物の desktop bus を参照しません。両 OS の CI は `XPOTATO_RUNTIME_SMOKE=1` で、公式固定依存の導入・隔離 stdio initialize/tools-list・PATH を空にした実 content search も検証します。キー入力、Tunnel control-plane 接続、実 Vault 操作はありません。
 

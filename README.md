@@ -1,13 +1,15 @@
 # xpotato-mcp-tunnel
 
-Go コア 0.2.2 は Windows／Linux の資格情報保存を分離し、Setup の保存同意・非表示キー入力後は `xpotato-tunnel` 一つで起動できます。短いコマンドは本人の別の同意で既存ユーザー用 bin に置き、PATH は変更しません。PS/cmd/sh は引数を転送するだけです。
+Go コア 0.2.3 は Windows／Linux の日本語 Setup で、必要な情報と恒久保存先を最初に案内します。Tunnel ID と API キーを区別し、複数の許可フォルダーを対話で追加・削除・確認できます。保存前に設定を見直して修正・中断でき、専用資格情報レコードへの保存同意後にキーを非表示で入力します。次回からは `xpotato-tunnel` 一つで起動できます。短いコマンドの配置は別途同意を求め、PATH は変更しません。
+
+0.2.3 はレビュー用の候補です。採用済み main と配布済み artifact は 0.2.2 のままで、0.2.3 の採用・公開リリース・本人の実接続確認はまだ行っていません。
 
 ```text
 go build -trimpath ./cmd/xpotato-tunnel
 xpotato-tunnel setup
 ```
 
-本人は private CI のレビュー済み head に対応する Windows／Linux 実行ファイルと SHA256SUMS を取得できます。Go SDK は開発側にだけ必要です。通常ユーザーの Setup で端末名・既存 Tunnel ID・許可範囲・旧 launcher 停止済みの確認・キー保存同意を行い、同じ Tunnel の既存プラグインを再利用します。短いコマンドの保存先が既存 PATH にあれば `xpotato-tunnel`、なければ `~/.local/bin` の短いパスで起動します。
+本人は private CI のレビュー済み head に対応する Windows／Linux 実行ファイルと SHA256SUMS を取得できます。Go SDK は開発側にだけ必要です。通常ユーザーの Setup で端末名・既存 Tunnel ID・許可範囲・キー保存同意を行い、同じ Tunnel の既存プラグインを再利用します。短いコマンドの保存先が既存 PATH にあれば `xpotato-tunnel`、なければ Setup が表示する短いパスで起動します。
 
 更新は取得したレビュー済み新実行ファイルの `update` を本人が明示実行します。起動で npm/Git の取得やキーの再入力を行わず、稼働接続を再起動しません。操作手順は [Go Setup と起動](docs/setup-once-core.md) を参照してください。
 

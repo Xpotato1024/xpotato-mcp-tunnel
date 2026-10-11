@@ -10,7 +10,9 @@ import (
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/managed"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/platform"
 	"golang.org/x/term"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -21,30 +23,63 @@ const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
   --device NAME       (omit to use setup's default device)
   --mcp-url HTTPS_URL (setup only; owner-verified direct MCP endpoint, optional)
   --command-dir DIR  (setup only; optional short command location, local consent)
-Setup requests masked key input and local save consent once.
-Start uses the saved key without prompting; no arguments defaults to start.
-Tunnel plugin account registration requires the ChatGPT Plugins UI.
+setup は日本語ウィザードで設定・複数の許可フォルダー・恒久保存先を確認します。
+Tunnel ID と API キーは別物です。API キーは保存同意の後、非表示で入力します。
+start は保存済みキーを使用します。引数なしは start です。
+Tunnel のプラグイン登録は本人が ChatGPT Plugins UI で行います。
 `
 
 type terminal struct{}
 
+// Avoid read-ahead across the boundary to masked key input. Keeping a reader
+// also avoids losing later pasted nonsecret lines between Text calls.
+type singleByteReader struct{ io.Reader }
+
+func (r singleByteReader) Read(p []byte) (int, error) {
+	if len(p) > 1 {
+		p = p[:1]
+	}
+	return r.Reader.Read(p)
+}
+
+var textInput = bufio.NewReader(singleByteReader{os.Stdin})
+
 func (terminal) Text(label string) (string, error) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return "", errors.New("interactive terminal required for setup")
+		return "", errors.New("Setup は本人の対話端末で実行してください")
 	}
 	fmt.Print(label + ": ")
-	line, e := bufio.NewReader(os.Stdin).ReadString('\n')
+	line, e := textInput.ReadString('\n')
+	if e != nil {
+		return "", core.ErrSetupCancelled
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "q", "cancel", "中断":
+		return "", core.ErrSetupCancelled
+	}
 	return strings.TrimSpace(line), e
 }
 func (t terminal) Consent(label string) (bool, error) {
-	line, e := t.Text(label)
-	return line == "yes", e
+	for {
+		line, e := t.Text(label)
+		if e != nil {
+			return false, e
+		}
+		switch strings.ToLower(line) {
+		case "yes", "はい":
+			return true, nil
+		case "no", "いいえ":
+			return false, nil
+		default:
+			fmt.Println("同意する場合は yes、同意しない場合は no、中断する場合は q を入力してください。")
+		}
+	}
 }
 func (terminal) Key() ([]byte, error) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return nil, errors.New("interactive terminal required")
 	}
-	fmt.Print("Runtime API key (input hidden): ")
+	fmt.Print("Runtime API キー（非表示入力、Ctrl+C で中断。Tunnel ID は入力しないでください）: ")
 	key, e := readKey(int(os.Stdin.Fd()))
 	fmt.Println()
 	return key, e
@@ -116,13 +151,25 @@ func run(args []string) (int, error) {
 	}
 	a := core.App{Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: managed.Manager{}, InstallCommand: managed.InstallCommand}
 	if command == "setup" {
+		a.PreviewCommand = managed.PreviewCommand
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return 1, errors.New("ユーザーの保存先を確認できません")
+		}
+		o, e = a.PrepareSetup(o, os.Stdout, filepath.Join(userHome, ".local", "bin"))
+		if e != nil {
+			return 1, e
+		}
 		a.InstallCommand = func(home string) error { return managed.SetupCommand(home, o.CommandDir, terminal{}) }
 	}
 	switch command {
 	case "setup":
 		o, e = a.Setup(o)
+		if e != nil {
+			e = fmt.Errorf("%w\n保存処理中の中断・失敗では、作成済み設定や保存済みキーを保持します。同じ setup で再開できます。", e)
+		}
 		if e == nil {
-			fmt.Printf("Setup saved. Start: %s\nReuse your existing plugin for this same Tunnel ID; only create a plugin if none exists. Account registration was not checked.\n", managed.StartCommand(o.Home))
+			fmt.Printf("Setup を保存しました。次回からの起動: %s\n同じ Tunnel ID の既存プラグインを再利用してください。未登録なら本人が登録します。アカウント側の登録状態は確認していません。\n", managed.StartCommand(o.Home))
 		}
 	case "start":
 		return a.Start(o)
