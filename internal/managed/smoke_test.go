@@ -55,7 +55,9 @@ func TestManagedInstallSmoke(t *testing.T) {
 	os.WriteFile(filepath.Join(configDir, "config.json"), b, 0600)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, node, filepath.Join(dir, "stdio.mjs"), "--no-onboarding")
+	// Explicit synthetic presentation flag exercises the pinned entry's color
+	// path even in CI pipes; real launches gate it on the user's terminal.
+	cmd := exec.CommandContext(ctx, node, filepath.Join(dir, "stdio.mjs"), "--no-onboarding", "--activity-color")
 	var activity bytes.Buffer
 	cmd.Stderr = &activity
 	cmd.Env = append(cleanEnv(os.Environ(), "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY", "NODE_OPTIONS", "NODE_PATH", "PATH"), "PATH=", "XPOTATO_MCP_PROFILE="+profile, "XPOTATO_MCP_COMMANDER_ENTRY="+filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"))
@@ -146,7 +148,7 @@ func TestManagedInstallSmoke(t *testing.T) {
 	t.Log("functional content search succeeded with PATH empty and locked package rg")
 	cmd.Process.Kill()
 	cmd.Wait() // Join stderr copying before examining the display buffer.
-	if !strings.Contains(activity.String(), "start_search 開始") || !strings.Contains(activity.String(), "start_search 応答完了") {
+	if !strings.Contains(activity.String(), "\x1b[36m[RUN]\x1b[0m [MCP #1] start_search 処理開始") || !strings.Contains(activity.String(), "start_search 応答成功") {
 		t.Fatal("pinned SDK tool lifecycle observer did not run")
 	}
 	if _, e := os.Stat(filepath.Join(configDir, "puppeteer-cache")); e == nil {

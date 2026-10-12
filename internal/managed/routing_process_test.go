@@ -78,7 +78,7 @@ func TestActualRuntimeChildIgnoresMaliciousAmbientRouting(t *testing.T) {
 		t.Fatal("human status contaminated protocol stdout")
 	}
 	joined := strings.Join(messages, "\n")
-	if !strings.Contains(joined, "成功はまだ未確認") || !strings.Contains(joined, "終了コード 42") || strings.Contains(joined, "synthetic-routing-key") {
+	if !strings.Contains(joined, "接続はまだ未確認") || !strings.Contains(joined, "OpenAI トンネル 切断") || !strings.Contains(joined, "終了コード 42") || strings.Contains(joined, "synthetic-routing-key") {
 		t.Fatal("unsafe or missing launch status")
 	}
 	if e != nil || code != 42 {

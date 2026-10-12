@@ -56,7 +56,13 @@ export function argumentSummary(args) {
   return lines.join('\n').slice(0, 4096);
 }
 
-export function instrumentTools(Server, { details = false, write = writeActivity } = {}) {
+export function activityLine(tag, message, color = false) {
+  const colors = { RUN: '36', OK: '32', ERR: '31', INFO: '36' };
+  const marker = `[${tag}]`;
+  return `${color ? `\x1b[${colors[tag] ?? '36'}m${marker}\x1b[0m` : marker} ${message}\n`;
+}
+
+export function instrumentTools(Server, { details = false, color = false, write = writeActivity } = {}) {
   const register = Server.prototype.setRequestHandler;
   let sequence = 0;
   const emit = s => { try { write(s); } catch { /* display cannot alter a tool response */ } };
@@ -67,18 +73,18 @@ export function instrumentTools(Server, { details = false, write = writeActivity
       const id = ++sequence;
       const rawName = request?.params?.name;
       const name = toolNames.has(rawName) ? rawName : '[ツール名非表示]';
-      emit(`[tool #${id}] ${name} 開始\n`);
+      emit(activityLine('RUN', `[MCP #${id}] ${name} 処理開始`, color));
       if (details) {
         let summary = '[引数の値は非表示]';
         try { summary = argumentSummary(request?.params?.arguments); } catch { /* observer is best effort */ }
-        emit(`[tool #${id}] 明示指定の引数詳細（本文・結果は非表示）\n${summary}\n`);
+        emit(activityLine('INFO', `[MCP #${id}] 明示指定の引数詳細（本文・結果は非表示）\n${summary}`, color));
       }
       try {
         const result = await handler.call(this, request, ...extra);
-        emit(`[tool #${id}] ${name} ${result?.isError ? '失敗応答' : '応答完了'} (${Math.round(performance.now() - started)}ms)\n`);
+        emit(activityLine(result?.isError ? 'ERR' : 'OK', `[MCP #${id}] ${name} ${result?.isError ? '失敗応答' : '応答成功'} (${Math.round(performance.now() - started)}ms)`, color));
         return result;
       } catch (error) {
-        emit(`[tool #${id}] ${name} 失敗 (${Math.round(performance.now() - started)}ms)\n`);
+        emit(activityLine('ERR', `[MCP #${id}] ${name} 処理失敗 (${Math.round(performance.now() - started)}ms)`, color));
         throw error;
       }
     }, ...rest);

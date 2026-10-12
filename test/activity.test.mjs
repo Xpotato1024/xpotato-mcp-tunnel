@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { argumentSummary, boundedWriter, instrumentTools } from '../internal/managed/assets/activity.mjs';
 
-function observed(details = false, write) {
+function observed(details = false, write, color = false) {
   class Server { setRequestHandler(schema, handler) { this.handler = handler; } }
   let output = '';
-  instrumentTools(Server, { details, write: write ?? (s => { output += s; }) });
+  instrumentTools(Server, { details, color, write: write ?? (s => { output += s; }) });
   return { server: new Server(), schema: { shape: { method: { value: 'tools/call' } } }, output: () => output };
 }
 
@@ -15,8 +15,8 @@ test('default lifecycle preserves synthetic result and never displays arguments/
   const result = { content: [{ text: 'PRIVATE_RESULT_MARKER' }] };
   f.server.setRequestHandler(f.schema, async request => result);
   assert.equal(await f.server.handler({ params: { name: 'read_file', arguments: { path: 'PRIVATE_ARGUMENT_MARKER' } } }), result);
-  assert.match(f.output(), /read_file 開始/);
-  assert.match(f.output(), /read_file 応答完了 \(\d+ms\)/);
+  assert.match(f.output(), /\[RUN\] \[MCP #1\] read_file 処理開始/);
+  assert.match(f.output(), /\[OK\] \[MCP #1\] read_file 応答成功 \(\d+ms\)/);
   assert.doesNotMatch(f.output(), /PRIVATE_/);
 });
 
@@ -28,7 +28,7 @@ test('isError and thrown failures are distinguished without exposing error conte
   const error = new Error('PRIVATE_THROWN_MARKER');
   f.server.setRequestHandler(f.schema, async () => { throw error; });
   await assert.rejects(f.server.handler({ params: { name: 'start_process' } }), e => e === error);
-  assert.match(f.output(), /失敗 \(\d+ms\)/);
+  assert.match(f.output(), /\[ERR\].*処理失敗 \(\d+ms\)/);
   assert.doesNotMatch(f.output(), /PRIVATE_/);
 });
 
@@ -101,4 +101,19 @@ test('unknown tool names and other protocol methods disclose no payload', async 
   other.server.setRequestHandler({ shape: { method: { value: 'initialize' } } }, async () => ({}));
   await other.server.handler({ params: {} });
   assert.equal(other.output(), '');
+});
+
+test('activity stays silent without requests and plain unless launcher enables color', async () => {
+  const plain = observed();
+  plain.server.setRequestHandler(plain.schema, async () => ({}));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(plain.output(), '');
+  await plain.server.handler({ params: { name: 'list_directory' } });
+  assert.doesNotMatch(plain.output(), /\x1b|[\u{1f300}-\u{1faff}]/u);
+  const colored = observed(false, undefined, true);
+  colored.server.setRequestHandler(colored.schema, async () => ({ isError: true }));
+  await colored.server.handler({ params: { name: 'list_directory' } });
+  assert.match(colored.output(), /\x1b\[36m\[RUN\]\x1b\[0m/);
+  assert.match(colored.output(), /\x1b\[31m\[ERR\]\x1b\[0m.*失敗応答/);
+  assert.equal(plain.output().split('\n').filter(Boolean).length, 2);
 });

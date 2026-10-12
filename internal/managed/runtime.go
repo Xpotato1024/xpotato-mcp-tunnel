@@ -95,6 +95,7 @@ type Receipt struct {
 type Manager struct {
 	Progress        func(string)
 	ActivityDetails bool
+	ActivityColor   bool
 }
 
 func (m Manager) stage(label string, work func() error) error {
@@ -600,6 +601,11 @@ func (manager Manager) Run(home string, d core.Device, key []byte) (int, error) 
 	if manager.ActivityDetails {
 		command += " --activity-details"
 	}
+	// Presentation follows the launcher's stderr capability/NO_COLOR decision;
+	// the Node child's stderr is a protocol-managed pipe, not the user's TTY.
+	if manager.ActivityColor {
+		command += " --activity-color"
+	}
 	deviceDir := filepath.Join(home, "devices", d.Name)
 	profile := core.ProfilePath(home, d)
 	for _, sub := range []string{"Temp", "AppData/Roaming", "AppData/Local", ".config", ".cache", ".local/share"} {
@@ -639,7 +645,7 @@ func (manager Manager) Run(home string, d core.Device, key []byte) (int, error) 
 		}
 		switch state {
 		case "running":
-			manager.Progress("Tunnel 子プロセスを起動しました。接続の成功はまだ未確認です")
+			manager.Progress("OpenAI トンネルの子プロセスを起動（接続はまだ未確認）")
 			stopStatus = monitorConnection(filepath.Join(run, "health-url.txt"), manager.Progress, progressInterval)
 		case "stopping":
 			stopStatus()
@@ -648,7 +654,7 @@ func (manager Manager) Run(home string, d core.Device, key []byte) (int, error) 
 			stopStatus()
 			manager.Progress("この起動の子プロセスを終了・回収中")
 		case "stopped":
-			manager.Progress("Tunnel 子プロセスが終了しました")
+			manager.Progress("OpenAI トンネル 切断（この起動の子プロセスが終了）")
 		}
 	})
 	if e != nil {
