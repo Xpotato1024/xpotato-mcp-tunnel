@@ -1,6 +1,6 @@
 # 非秘密 .env による Setup と同じ端末の更新
 
-採用済み main `9ac56a8d` の Go コア 0.2.4 から `--env-file` を利用できます。0.2.5 は進捗・activity 表示のレビュー候補です。本候補の採用・公開リリース・本人の実設定への適用はまだ行っていません。
+Goコアの`--env-file`は、本人が許可範囲やTunnel IDを変更するときの入力補助です。通常の版更新にはSetupやキー再入力を使わず、新exeの`update`を実行します。[導入・更新の入口](quickstart.md)を参照してください。採用済みmainは0.2.6、今回の0.2.7はレビュー候補です。
 
 ## 推奨形式
 
@@ -21,7 +21,7 @@ API キーの設定名を追加しても読み込み・保存できません。G
 
 ## 本人の操作手順
 
-1. レビュー・採用後の 0.2.4 実行ファイルとチェックサムを確認します。本人の通常ユーザーの対話端末で操作します。Windows は Credential Manager、Linux は解除済みのユーザー Secret Service が必要です。
+1. レビュー・採用済みの実行ファイルとチェックサムを確認します。本人の通常ユーザーの対話端末で操作します。Windows は Credential Manager、Linux は解除済みのユーザー Secret Service が必要です。
 2. `setup.env` の値を編集します。既存端末を更新するときは、保存済みと同じ端末名・恒久保存先を指定します。
 3. Windows は `.\xpotato-tunnel.exe setup --env-file .\setup.env`、Linux は `./xpotato-tunnel setup --env-file ./setup.env` を実行します。既定以外の保存先なら `--home` に同じ絶対パスを毎回指定します。任意で `--command-dir`、検証済み直接接続先の `--mcp-url` も使えます。`--device`、`--tunnel-id`、`--allow` と `--env-file` は併用できません。
 4. 保存前の確認画面で端末名、Tunnel ID、許可フォルダー、恒久保存先、Go 本体・runtime・profile・ラッパー・短縮コマンドの場所を確認します。既存設定では変更前の実際の範囲と変更後の範囲を表示します。手動で絞り込んだ既存 profile でも、`.env` の一覧に広がる場合は差分として表示します。`.env` は実際の範囲をこの一覧へ切り替える指定です。

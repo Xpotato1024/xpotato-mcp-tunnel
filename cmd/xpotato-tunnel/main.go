@@ -23,6 +23,7 @@ const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
   --home ABSOLUTE_DIR  (all commands)
   --device NAME       (omit to use setup's default device)
   --activity-details  (start only; conservative argument display on stderr)
+  --diagnostics      (start only; internal INFO logs on stderr, raw HTTP off)
   --mcp-url HTTPS_URL (setup only; owner-verified direct MCP endpoint, optional)
   --command-dir DIR  (setup only; optional short command location, local consent)
 setup は日本語ウィザードで設定・複数の許可フォルダー・恒久保存先を確認します。
@@ -117,6 +118,7 @@ func parse(args []string) (string, core.Options, error) {
 	f.StringVar(&o.MCPURL, "mcp-url", "", "endpoint")
 	f.StringVar(&o.CommandDir, "command-dir", "", "short command directory")
 	f.BoolVar(&o.ActivityDetails, "activity-details", false, "explicit tool argument display")
+	f.BoolVar(&o.Diagnostics, "diagnostics", false, "explicit internal diagnostic logs")
 	var allow repeated
 	f.Var(&allow, "allow", "root")
 	if e := f.Parse(args); e != nil || f.NArg() != 0 {
@@ -125,6 +127,9 @@ func parse(args []string) (string, core.Options, error) {
 	o.Allow = allow
 	if o.ActivityDetails && command != "start" {
 		return "", o, errors.New("--activity-details is start-only")
+	}
+	if o.Diagnostics && command != "start" {
+		return "", o, errors.New("--diagnostics is start-only")
 	}
 	envSpecified, conflict := false, false
 	f.Visit(func(option *flag.Flag) {
@@ -177,20 +182,23 @@ func run(args []string) (int, error) {
 		fmt.Println(core.Version)
 		return 0, nil
 	}
-	runtimeManager := managed.Manager{ActivityDetails: o.ActivityDetails}
+	runtimeManager := managed.Manager{ActivityDetails: o.ActivityDetails, Diagnostics: o.Diagnostics}
 	var report func(string)
 	if command == "setup" {
 		style := display.Detect(os.Stderr)
 		// Keep Setup progress ordered before the next interactive input prompt.
 		runtimeManager.Progress = func(message string) { fmt.Fprint(os.Stderr, style.Format(message)) }
 	}
-	if command == "start" {
+	if command == "start" || command == "update" {
 		style := display.Detect(os.Stderr)
 		reporter := display.New(os.Stderr, style)
 		defer reporter.Close()
 		report = func(message string) { reporter.Report(message) }
 		runtimeManager.Progress = report
 		runtimeManager.ActivityColor = style.Color
+		if command == "start" && o.Diagnostics {
+			report("内部診断ログ有効（INFO、HTTP raw無効、認証値をマスク）")
+		}
 	}
 	a := core.App{Progress: report, Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: runtimeManager, InstallCommand: managed.InstallCommand}
 	if command == "setup" {

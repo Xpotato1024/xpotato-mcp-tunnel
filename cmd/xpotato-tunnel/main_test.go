@@ -30,6 +30,24 @@ func TestActivityDetailsRequireExplicitStart(t *testing.T) {
 		t.Fatal("details enabled by default", err)
 	}
 }
+
+func TestDiagnosticsAreExplicitAndStartOnly(t *testing.T) {
+	for _, command := range []string{"setup", "doctor", "update", "rollback", "credentials", "plugin"} {
+		if _, _, err := parse([]string{command, "--diagnostics"}); err == nil {
+			t.Fatal("diagnostics accepted outside start", command)
+		}
+	}
+	for _, enabled := range []bool{false, true} {
+		args := []string{"start", "--home", t.TempDir(), "--device", "fixture"}
+		if enabled {
+			args = append(args, "--diagnostics")
+		}
+		_, options, err := parse(args)
+		if err != nil || options.Diagnostics != enabled || options.ActivityDetails {
+			t.Fatal("diagnostics changed argument disclosure", err, options)
+		}
+	}
+}
 func TestHelpAndVersionNeedNoIdentityOrHome(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"version"}} {
 		if _, _, e := parse(args); e != nil {

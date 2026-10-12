@@ -94,7 +94,10 @@ func New(writer io.Writer, style Style) *Reporter {
 
 // Best effort: one bounded writer goroutine, no waiting when the sink is slow.
 func (r *Reporter) Report(message string) bool {
-	line := r.style.Format(message)
+	return r.enqueue(r.style.Format(message))
+}
+
+func (r *Reporter) enqueue(line string) bool {
 	if len(line) > maxMessageBytes || !utf8.ValidString(line) {
 		return false
 	}

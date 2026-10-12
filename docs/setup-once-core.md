@@ -1,8 +1,8 @@
 # Go コア: Setup と起動
 
-0.2.5 候補の入口は `cmd/xpotato-tunnel` です。Go を選んだ理由は、単体実行ファイルを配布でき、両 OS の資格情報・ファイルロック・子プロセス API を分離できるためです。PS/cmd/sh は保存済みの Go 実行ファイルへ引数を渡すだけです。Desktop Commander の実行だけに固定版 Node を使用します。旧 Node CLI と 30 テストは保持しています。
+現行入口は `cmd/xpotato-tunnel` のGoコアです。PS/cmd/shは保存済みexeへ引数を渡し、Desktop Commanderだけに固定Nodeを使います。旧Node CLIと専用テスト/npm入口はGit追跡コードから撤去しました。既存core/shim更新互換と旧版保持は維持しています。まず [導入・更新の入口](quickstart.md) を参照してください。
 
-採用済み main `9ac56a8d`／配布済み artifact は 0.2.4 です。0.2.5 は進捗・activity 表示とメモリ効率改善のレビュー候補で、採用・公開リリース・本人の実設定への適用はまだ行っていません。変更内容は [Runtime UX](runtime-ux.md)、非秘密ファイルで入力を簡略化する手順は [.env Setup](setup-env.md) を参照してください。以下は対話ウィザードの仕様です。本人による実キー保存・実接続はこの検証では行いません。
+採用済みmainは0.2.6（`5d2c32c1`）、0.2.7はレビュー候補です。[表示仕様](runtime-ux.md)、[非秘密.env入力](setup-env.md)、[確認・診断](operations.md)を参照してください。公開配布先やインストーラは追加していません。
 
 ## 本人による導入
 
@@ -80,11 +80,11 @@ Setup は途中状態を保持します。保存を断ったり、ネットワ�
 | `rollback` | 保存済みの前 runtime へ参照を戻す。現コアが認識する版に限る |
 | `plugin` | 登録用情報／指定済み直接 MCP endpoint の bundle を再生成 |
 
-今回の固定版は Go コア 0.2.4 候補、Node 24.14.0、Tunnel runtime 0.0.16、Desktop Commander 0.2.52 です。npm はレビュー済み `package-lock.json` の `ci --ignore-scripts` で全推移依存を固定します。ripgrep 1.18.0 と各 OS 用 optional binary package も lock に含み、ホストの rg を使わない機能検索で検証します。Chrome の自動取得は再有効化しません。
+固定依存はNode24.14.0、Tunnel runtime0.0.16、Desktop Commander0.2.52です。`internal/managed/assets/package-lock.json`を埋め込み、runtime内のnpm ci --ignore-scriptsで推移依存を固定します。rootの旧npm入口とは別です。ripgrepとOS別binaryもlockに含み、Chrome自動取得抑止は保持します。
 
 更新は、取得したレビュー済み新パッケージの `./xpotato-tunnel update`（Windows は `.\xpotato-tunnel.exe update`）を本人が明示実行します。コア、固定 runtime、同意済みの短いコマンドを切り替え、稼働中の接続は再起動しません。Start で npm/Git／パッケージ取得を行わず、背景の自動更新も行いません。実行ファイルは検証済みの同一ディレクトリ stage から atomic rename し、ラッパーの途中更新は intent を使って同じ update の再実行で再開します。旧版と設定は保持します。同じコア版の異なるバイナリは上書きせず停止します。
 
-現行 0.2.4 候補に別 runtime 版は同梱していないため、初回 `rollback` には前版がありません。runtime rollback は、そのコアが認識する版に限ります。
+初回Setupに前runtimeはありません。rollbackは現コアが認識する保存済みruntimeに限り、任意の旧版へ戻す機能ではありません。
 
 二重起動は同じ保存先の端末単位と Tunnel ID 単位で防止します。maintenance/install/start は OS ファイルロックを使い、中断で OS が解放します。本人の OS 所有権と記録所有者を確認して再利用し、ファイルを削除・置換して別の生存中 holder を邪魔しません。lock の所有者メタデータも atomic rename で保存します。旧形式や他所有者の lock は自動採用しません。
 
@@ -102,8 +102,9 @@ Setup は `devices/<device>/registration/tunnel-registration.json` に同じ Tun
 go test -count=1 ./...
 go vet ./...
 go build -trimpath ./cmd/xpotato-tunnel
-npm run check
-npm test
+node --check internal/managed/assets/stdio.mjs
+node --check internal/managed/assets/activity.mjs
+node --test test/activity.test.mjs
 ```
 
 Go の通常テストは fake Vault、合成キー、一時 profile を使用します。実際の Setup 子プロセスの導入中／キー待ち／コア stage コピーを終了させて再開を検証し、親・孫の終了回収では無関係の sentinel が生存することを確認します。生成 PS/cmd/sh を実行し、空白を含む引数と終了コード転送も検証します。悪意の ambient 設定は、HTTP を行わない runtime 代替 exe の実 argv/env で除去を確認します。
