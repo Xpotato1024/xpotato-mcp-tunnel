@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/display"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/managed"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/platform"
 	"golang.org/x/term"
@@ -179,11 +180,17 @@ func run(args []string) (int, error) {
 	runtimeManager := managed.Manager{ActivityDetails: o.ActivityDetails}
 	var report func(string)
 	if command == "setup" {
-		runtimeManager.Progress = func(message string) { fmt.Fprintln(os.Stdout, message) }
+		style := display.Detect(os.Stderr)
+		// Keep Setup progress ordered before the next interactive input prompt.
+		runtimeManager.Progress = func(message string) { fmt.Fprint(os.Stderr, style.Format(message)) }
 	}
 	if command == "start" {
-		report = func(message string) { fmt.Fprintln(os.Stderr, message) }
+		style := display.Detect(os.Stderr)
+		reporter := display.New(os.Stderr, style)
+		defer reporter.Close()
+		report = func(message string) { reporter.Report(message) }
 		runtimeManager.Progress = report
+		runtimeManager.ActivityColor = style.Color
 	}
 	a := core.App{Progress: report, Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: runtimeManager, InstallCommand: managed.InstallCommand}
 	if command == "setup" {

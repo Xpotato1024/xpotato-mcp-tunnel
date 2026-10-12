@@ -26,5 +26,5 @@ if (!process.argv.includes('--no-onboarding')) process.argv.push('--no-onboardin
 // request-handler boundary without consuming/rewriting protocol streams.
 const sdk = path.join(path.dirname(entry), '..', '..', '..', '@modelcontextprotocol', 'sdk', 'dist', 'esm', 'server', 'index.js');
 const { Server } = await import(pathToFileURL(sdk).href);
-instrumentTools(Server, { details: process.argv.includes('--activity-details') });
+instrumentTools(Server, { details: process.argv.includes('--activity-details'), color: process.argv.includes('--activity-color') });
 await import(pathToFileURL(entry).href);
