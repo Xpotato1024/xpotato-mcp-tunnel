@@ -61,7 +61,7 @@ func TestUntrustedAmbientTunnelConfigurationCannotRouteSavedKey(t *testing.T) {
 	if !strings.Contains(joined, "CONTROL_PLANE_API_KEY=synthetic-saved-key") || !strings.Contains(joined, "HOME="+run) {
 		t.Fatal("key/isolation missing")
 	}
-	args := runtimeArguments(core.Device{Tunnel: "tunnel_fixture"}, run, "fixture-command")
+	args := runtimeArguments(core.Device{Tunnel: "tunnel_fixture"}, run, "fixture-command", false)
 	approved := false
 	for i, arg := range args {
 		if strings.Contains(arg, "synthetic-saved-key") {
@@ -79,6 +79,30 @@ func TestQuoteRejectsUnsupportedPaths(t *testing.T) {
 	for _, p := range []string{"bad'path", "bad\npath"} {
 		if _, e := Command(p, "stdio"); e == nil {
 			t.Fatal("unsafe path")
+		}
+	}
+}
+
+func TestDiagnosticLevelKeepsSafetyAndRoutingFlags(t *testing.T) {
+	for _, diagnostics := range []bool{false, true} {
+		args := runtimeArguments(core.Device{Tunnel: "tunnel_fixture"}, "fixture-run", "fixture-command", diagnostics)
+		level := "warn"
+		if diagnostics {
+			level = "info"
+		}
+		for flag, want := range map[string]string{"--log.level": level, "--log.file": "", "--control-plane.base-url": "https://api.openai.com", "--control-plane.poll-channel": "main", "--control-plane.max-inflight": "1", "--mcp.max-concurrent-requests": "1", "--control-plane.api-key": "env:CONTROL_PLANE_API_KEY"} {
+			found := false
+			for i, arg := range args {
+				if arg == flag && i+1 < len(args) && args[i+1] == want {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("diagnostic mode changed required flag", flag)
+			}
+		}
+		if !strings.Contains(strings.Join(args, " "), "--log.http-raw-unsafe=false") {
+			t.Fatal("raw HTTP logging enabled")
 		}
 	}
 }

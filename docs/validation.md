@@ -1,58 +1,21 @@
-# 検証メモ
+# 隔離回帰と互換性
 
-## 自動・隔離検証
+現行入口はGoコアです。撤去した旧Node CLIのbin/src/manifest/npm入口と専用テストを開発コマンドに使いません。旧実装はGit履歴に残り、本人PCの配布物・バックアップ・OS保管庫・設定を削除する処理はありません。
 
-`npm test` は Node の標準 test runner を使用します。ネットワークからの取得は mock、キーは合成値、設定・state はテスト専用の一時ディレクトリです。本人の認証ファイルや既存 Tunnel を使いません。
-
-検証する内容:
-
-- setup の再実行で設定の bytes、本人の編集、custom field を保持
-- 許可ルートの空・不存在を拒否、端末間の config 分離
-- update の次回起動への適用、旧 runtime/実行中 lock の保持、失敗時の selection 保持
-- doctor の読み取り確認、runtime 改変の検出をキー入力前に実施
-- 空白付き Windows executable と一つの `--mcp.command` 引数を実際の Node 子プロセスで round-trip
-- 子プロセス出力の継承、終了コードの伝達
-- profile 分離とキー除去を実際の stdio wrapper 子プロセスで確認
-- 多重起動の拒否、終了・失敗・中止後の自分の lock の片付け
-- 手動再起動時のキー再入力、config 保持と更新版の選択
-- マスク入力、backspace、raw mode の復旧
-- `EXDEV` で元ファイル・保存済み設定を保持し、copy/delete に切り替えない
-- 管理者・別所有者・未確認の旧 profile をキー入力や書き込み前に拒否
-- 許可ルートの無断拡大を拒否し、範囲を狭める編集は保持
-- Chrome の自動初期化処理を抑止し、明示的な PDF 呼び出しは維持
-- 互換性未確認や未抑止 runtime を再利用しない
-- 同じ home の別 device による同一 Tunnel 並列起動を拒否
-
-`npm run check` は CLI と各 `.mjs` の構文を確認します。このテストで外部の control plane 認証や本番 Tunnel 接続が成功したとは判定しません。
-
-実インストールの確認は opt-in です。本人が取得した公式 v0.0.16 runtime ZIP のパスを渡します。SHA256 を照合して一時ディレクトリへ展開し、固定版 npm の取得、runtime の version、Commander の initialize/tools/list を確認します。キーと control plane は使いません。初回の stdio 起動は環境によって 20 秒以上かかるため、60 秒でタイムアウトします。
-
-```powershell
-npm run smoke:install -- 'C:\Downloads\tunnel-client-runtime-v0.0.16-windows-amd64.zip'
+```text
+go test -count=1 ./...
+go vet ./...
+node --check internal/managed/assets/stdio.mjs
+node --check internal/managed/assets/activity.mjs
+node --test test/activity.test.mjs
 ```
 
-## Windows 実機で確認した結果 (2026-10-10)
+Go通常テストは合成キー、fake Vault、別home/profileを使います。Windows/Linuxで新規Setup、途中再開、確認付き変更、update/失敗時の旧参照、古いcoreからの更新、旧ラッパーの置換、キー再入力なし、scope/identity/lock拒否を検証します。既存core/shim更新互換と旧版保持は撤去対象ではありません。
 
-Node.js v24.14.0 で Chrome・所有者・許可ルートの回帰を含む隔離テストを検証しています。実 Windows トークンの読取確認も非管理者でした。Chrome 抑止 patch と所有者 guard を含む実 install smoke は 34,958 ms で成功し、runtime v0.0.16 と Commander 0.2.52 の initialize/tools/list から 26 ツールを確認しました。profile は一時ディレクトリ、API キーは未使用、control plane は未起動です。初回の 20 秒制限でタイムアウトしたため、現在の smoke 制限は 60 秒です。
+表示は正常待機16秒、接続/中断/復帰、古いpoll成功、TTY/NO_COLOR、制御文字、秘密mask、queue上限、遅い/壊れた出力先、stderrとstdout分離を検証します。Node activityは固定SDKの公開handler境界で結果・例外を保持します。
 
-setup 一度のキー入力・接続登録と以後の入力不要起動は、この版の受け入れ合格項目ではありません。未実装の次段階の要件です。
+CIのGoジョブはXPOTATO_RUNTIME_SMOKE=1で固定runtimeを新規fixtureに導入し、hash/version、隔離stdio initialize/tools-list、PATH空の実検索を確認します。実キー/control-planeは使いません。Linux保管庫テストは専用の一時D-Bus/fake serviceを使います。停止テストは自身のfixtureだけを生成・回収します。
 
-## 本人の受け入れ確認
+CIはWindows/LinuxのGoとNode activity、review packageの作成・展開・checksum/version確認のみです。deploy/publishはありません。scripts/benchmark-*.mjsと0.2.5測定JSONはGo版の開発/履歴として保持し、新版の性能改善や電池負荷には読み替えません。
 
-Draft PR のレビュー後、固定 commit の checkout または private Git の認証済み npx から確認してください。
-
-```powershell
-# checkout で確認する場合
-node .\bin\cli.mjs --help
-node .\bin\cli.mjs setup --device acceptance --home 'C:\Work\Tunnel acceptance' --tunnel-id tunnel_YOUR_TEST_ID --allow 'C:\Work\Test files'
-node .\bin\cli.mjs doctor --device acceptance --home 'C:\Work\Tunnel acceptance'
-node .\bin\cli.mjs start --device acceptance --home 'C:\Work\Tunnel acceptance'
-```
-
-保存先と許可ディレクトリは本人が先に作成し、既存接続と別のテスト Tunnel ID を選んでください。`start` で本人がキーをマスク入力した後、アプリで接続とツール一覧を確認します。同じ Tunnel ID へ切り替える場合は、既存 launcher の停止時刻を本人が選んでください。
-
-専用テストファイルで write/read/edit/read、長い UTF-8 ファイルの offset 読み取り、content search、同一ドライブ move を確認します。別ドライブ move は失敗し、元が残ることを確認します。コマンドは専用の短時間プロセスで出力読み取りと自然終了を確認してください。業務ファイルや資格情報はテストに使いません。
-
-さらに、config の非秘密項目を一つ本人が編集し、setup 再実行・update・手動再起動の後も値が保存されることを確認します。キーは再入力され、保存済みのキーが自動使用されないことを確認します。
-
-実接続、本人の API キー入力、新 CLI への本番切り替えはこの実装作業では実行しません。既存 launcher での接続成功や受け入れ結果を、新 CLI での実接続成功とは扱いません。
+race detectorはC compilerが必要です。実接続でのスリープ・回線切替・手動描画・長時間負荷は隔離回帰と区別します。既存Linux heartbeatファイル比較の不安定な履歴は各main配布記録に残しています。

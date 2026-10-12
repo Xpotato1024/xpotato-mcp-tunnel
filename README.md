@@ -1,64 +1,36 @@
 # xpotato-mcp-tunnel
 
-Go コアは Windows／Linux の日本語 Setup、非秘密 `.env` 入力、同じ端末名での確認付き設定更新を提供します。端末名・Tunnel ID・複数の許可フォルダーをファイルから読み、保存前に内容と既存設定との差分を確認します。キーだけは専用資格情報レコードへの保存同意後に非表示で入力します。次回からは `xpotato-tunnel` 一つで起動できます。短いコマンドの配置は別途同意を求め、PATH は変更しません。
+Windows/Linux amd64で、端末内のDesktop CommanderをOpenAIトンネルにつなぐGoコアです。通常ユーザーが一度Setupし、次回から保存済みキーで起動できます。Node/Commander/Tunnelは固定runtimeに同梱し、利用者のGo/Node/npm導入は不要です。
 
-採用済み main `be45db20` は 0.2.5 です。0.2.6 のレビュー候補は正常待機の定例表示を廃止し、「OpenAI トンネル」の接続・通信中断・再接続とMCP処理の開始・応答を文字ラベルと対応端末の色で表示します。古い通信成功は接続状態未確認へ戻します。Setup工程の進捗案内は保持します。[表示・測定の仕様](docs/runtime-ux.md) を参照してください。0.2.6 の採用・merge・本人環境への適用はまだ行っていません。
+採用済みmainは0.2.6（`5d2c32c1`）。このブランチの0.2.7はレビュー候補です。旧Node CLIはGit追跡コードから撤去しました。PC上の旧配布物・バックアップ・設定・資格情報を削除する機能はありません。
+
+## 使い始める・更新する
+
+[導入の入口](docs/quickstart.md) に、配布物の確認、新規Setup、既存環境のupdate、起動・停止をまとめています。配布は現在のprivate CI review artifactです。新しい公開配布先やインストーラは追加していません。
+
+- 初めて使う: レビュー済み配布物を展開し、通常の対話端末で新exeの`setup`を実行。
+- 既に使っている: 新しい配布exeの`update`を実行。同じhome/deviceと保存済みキーを再利用。
+- 困ったとき: [確認・診断・再開](docs/operations.md)。設定を削除せず、保存版と稼働版を分けて確認。
+
+通常は「OpenAI トンネル」の接続変化とMCP処理イベント、警告・エラーをstderrへ表示し、正常待機の定例通知を出しません。内部INFOは`start --diagnostics`で明示表示します。`--activity-details`による引数表示は別の選択です。色だけに依存せず文字ラベルを併記し、非TTY/NO_COLORでは無色です。
+
+## 仕様と開発
+
+- [Setup・資格情報・更新の詳細](docs/setup-once-core.md)
+- [非秘密.env入力と変更確認](docs/setup-env.md)
+- [表示と出力上限](docs/runtime-ux.md)
+- [隔離回帰と互換性](docs/validation.md)
+- [過去の測定と制約](docs/performance-review.md)
 
 ```text
+go test -count=1 ./...
+go vet ./...
 go build -trimpath ./cmd/xpotato-tunnel
-xpotato-tunnel setup
-xpotato-tunnel setup --env-file ./setup.env
+node --check internal/managed/assets/stdio.mjs
+node --check internal/managed/assets/activity.mjs
+node --test test/activity.test.mjs
 ```
 
-本人は private CI のレビュー済み head に対応する Windows／Linux 実行ファイルと SHA256SUMS を取得できます。Go SDK は開発側にだけ必要です。通常ユーザーの Setup で端末名・既存 Tunnel ID・許可範囲・キー保存同意を行い、同じ Tunnel の既存プラグインを再利用します。短いコマンドの保存先が既存 PATH にあれば `xpotato-tunnel`、なければ Setup が表示する短いパスで起動します。
+開発用Nodeは24以上。現行MCPアダプターと固定依存lockは`internal/managed/assets`にあります。GoのChrome自動取得抑止、旧core/shimの更新互換、不変runtimeと旧版保持は残しています。Go版のbenchmarkツールと0.2.5測定履歴も保持します。旧npm/npx CLI入口とその専用テストはありません。
 
-更新は取得したレビュー済み新実行ファイルの `update` を本人が明示実行します。起動で npm/Git の取得やキーの再入力を行わず、稼働接続を再起動しません。操作手順は [Go Setup と起動](docs/setup-once-core.md) を参照してください。
-
-推奨ファイル形式と同じ端末の更新手順は [非秘密 .env Setup](docs/setup-env.md) を参照してください。対話入力だけの Setup も維持しています。Windows はユーザー Credential Manager、Linux は解除済みのユーザー Secret Service を使用します。Linux headless／ロック中には平文へフォールバックせず停止します。
-
-**プラグインのアカウント登録は未自動化です。** Setup は Tunnel ID と登録案内を生成します。本人が検証した直接 HTTPS MCP URL を指定した場合は portable plugin bundle も生成しますが、アップロード・有効化は行いません。公式の Tunnel 登録は [ChatGPT Plugins の手順](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels#connect-from-chatgpt) に従います。
-
-開発検証は `go test -count=1 ./...`、`go vet ./...`、`npm run check`、`npm test` です。実キー・実 Vault・実接続を使わないテストで、旧 Node CLI の検証も保持しています。
-
-## 旧 Node CLI 0.1.1 の記録
-
-以下は PR #1 のプロトタイプの手順です。Go コアの入口は上の案内を使用してください。
-
-Desktop Commander と OpenAI Secure MCP Tunnel を通常ユーザーで利用するための薄い Windows 向け Node CLI です。`setup / start / doctor / update` を提供します。
-
-現版は安全な起動基盤の試作です。目標である「setup で一度キーを入力し接続/プラグインを登録、以後ワンコマンドで追加入力なく起動」は未実装です。現在の start は毎回マスク入力します。資格情報保管と接続登録の設計は次段階で、現版の手順を最終 UX として扱いません。
-
-コードとの差分と最小の拡張案は [次段階の setup 設計](docs/next-setup-design.md) を参照してください。
-
-Windows x64、Node.js 22 以上と付属 npm、Windows PowerShell が必要です。この private リポジトリを取得できる Git の認証は事前に本人が済ませてください。
-
-setup した通常ユーザーを profile の所有者として記録し、管理者実行と別ユーザーによる利用を拒否します。SID はローカル設定に保存し、このリポジトリへ端末固有の SID を埋め込みません。Chrome の初期化時の自動確認・取得・cache 整理は抑止します。
-
-```powershell
-# Draft PR のレビュー用ブランチ。運用時はレビュー済み commit SHA に固定する。
-npx --yes --package=github:Xpotato1024/xpotato-mcp-tunnel#feat/windows-tunnel-cli xpotato-mcp-tunnel --help
-
-# C:\Work が存在することを確認し、本人の Tunnel ID を指定する。
-npx --yes --package=github:Xpotato1024/xpotato-mcp-tunnel#feat/windows-tunnel-cli xpotato-mcp-tunnel setup --device llm-01 --tunnel-id tunnel_YOUR_ID --allow 'C:\Work'
-npx --yes --package=github:Xpotato1024/xpotato-mcp-tunnel#feat/windows-tunnel-cli xpotato-mcp-tunnel doctor --device llm-01
-npx --yes --package=github:Xpotato1024/xpotato-mcp-tunnel#feat/windows-tunnel-cli xpotato-mcp-tunnel start --device llm-01
-```
-
-`start` のキーはターミナルでマスク入力します。API キーをコマンド、設定 JSON、Git、npm パラメータに書く必要はありません。各コマンドの `--home 'C:\別の保存先'` で保存先を変更できます。同じ端末には毎回同じ保存先を指定してください。
-
-キーなしで help/doctor を確認できます。初回の setup は公式 ZIP と npm パッケージを取得するためネットワークを使います。実行中の既存 Tunnel の切り替えは本人がタイミングを選んで行ってください。
-
-| コマンド | 動作 |
-| --- | --- |
-| `setup` | 固定バージョンを準備し、新規端末設定を作成。既存設定・許可ディレクトリを保持 |
-| `start` | 保存済み設定でフォアグラウンド起動。起動のたびにキーを入力 |
-| `doctor` | 設定、既知ファイルの SHA256、lock を読み取り確認。接続・認証は試行しない |
-| `update` | この CLI 版に同梱された manifest へ更新。設定を保持し、次回起動から適用 |
-
-現在の固定バージョンは **tunnel-client runtime v0.0.16 / Desktop Commander 0.2.52** です。`update` は registry の latest を選びません。新しい固定バージョンは manifest と互換性確認をレビューした CLI commit で導入します。
-
-運用・制限・再起動は [運用メモ](docs/operations.md)、検証範囲と本人の受け入れ確認は [検証メモ](docs/validation.md) を参照してください。
-
-開発時は `npm test` と `npm run check` を実行します。テストは一時ディレクトリ、合成キー、依存インストールの mock を使い、既存の Tunnel を起動・停止しません。
-
-このリポジトリは app ソースと固定 runtime 参照を管理します。端末固有の設定・資格情報・実行ログをコミットしません。Home-Servers へ統合する場合も、アプリ成果物のバージョン参照を接点にします。
+CIはWindows/LinuxのGo test/vet、隔離runtime連携、Node activity検証とreview package作成のみです。push/PRから本人端末へのデプロイ・公開・接続変更は行いません。
