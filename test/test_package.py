@@ -1,0 +1,73 @@
+"""Package layout, integrity, permissions, and overwrite regression checks."""
+
+import importlib.util
+import json
+from pathlib import Path
+import tarfile
+import tempfile
+import unittest
+import zipfile
+
+spec = importlib.util.spec_from_file_location(
+    "packaging", Path(__file__).resolve().parents[1] / "scripts/package-review.py")
+packaging = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(packaging)
+
+
+class PackageTests(unittest.TestCase):
+    def test_build_provenance(self):
+        commit = "a" * 40
+        info = (f"\tbuild\tGOOS=windows\n\tbuild\tGOARCH=amd64\n"
+                f"\tbuild\tvcs.revision={commit}\n\tbuild\tvcs.modified=false\n")
+        packaging.validate_build(info, commit, "windows-amd64")
+        for altered, sha, platform in (
+                (info, commit, "linux-amd64"),
+                (info.replace("GOARCH=amd64", "GOARCH=arm64"), commit, "windows-amd64"),
+                (info, "b" * 40, "windows-amd64"),
+                (info.replace("modified=false", "modified=true"), commit, "windows-amd64"),
+                ("", commit, "windows-amd64")):
+            with self.subTest(info=altered, sha=sha, platform=platform), self.assertRaises(ValueError):
+                packaging.validate_build(altered, sha, platform)
+
+    def test_archive_layout_and_tamper_detection(self):
+        for platform in ("windows-amd64", "linux-amd64"):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                binary = root / "fixture"
+                binary.write_bytes(b"test binary\x00\xff")
+                output = root / "candidate"
+                archive, content = packaging.assemble(
+                    binary, output, "0.2.7", "a" * 40, platform, False, "test build\n")
+                packaging.verify(content)
+                metadata = json.loads((content / "build-info.json").read_text())
+                self.assertFalse(metadata["runtimeIncluded"])
+                self.assertEqual(metadata["commit"], "a" * 40)
+                self.assertIn("0.2.7-" + platform, archive.name)
+                if platform.startswith("windows"):
+                    with zipfile.ZipFile(archive) as z:
+                        names = z.namelist()
+                        self.assertIn("xpotato-tunnel.exe", names)
+                        self.assertFalse(any(n.endswith((".zip", ".tar.gz")) for n in names))
+                else:
+                    with tarfile.open(archive) as tar:
+                        self.assertEqual(tar.getmember("xpotato-tunnel").mode & 0o777, 0o755)
+                self.assertEqual(packaging.sha256(archive),
+                                 (output / (archive.name + ".sha256")).read_text().split()[0])
+                (content / "README.md").write_text("corrupted")
+                with self.assertRaisesRegex(ValueError, "SHA256 mismatch"):
+                    packaging.verify(content)
+                with self.assertRaises(FileExistsError):
+                    packaging.assemble(binary, output, "0.2.7", "a" * 40, platform, False, "")
+
+    def test_reject_unsafe_metadata(self):
+        with tempfile.TemporaryDirectory() as temp:
+            for version, commit, platform in (("../bad", "a" * 40, "windows-amd64"),
+                                              ("0.2.7", "../bad", "windows-amd64"),
+                                              ("0.2.7", "a" * 40, "windows-arm64")):
+                with self.assertRaises(ValueError):
+                    packaging.assemble(Path(temp), Path(temp) / "out", version,
+                                       commit, platform, False, "")
+
+
+if __name__ == "__main__":
+    unittest.main()

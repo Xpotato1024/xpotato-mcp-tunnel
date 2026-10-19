@@ -14,3 +14,4 @@ credentials*
 /xpotato-tunnel
 /xpotato-tunnel.exe
 /dist/
+__pycache__/
