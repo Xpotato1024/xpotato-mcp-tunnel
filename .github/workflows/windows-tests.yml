@@ -33,31 +33,45 @@ jobs:
         env:
           XPOTATO_RUNTIME_SMOKE: '1'
       - run: go vet ./...
+      - name: Package regression tests
+        run: python -m unittest discover -s test -p "test_package.py" -v
       - name: Build review package (no publishing)
+        id: package
         shell: bash
         run: |
-          mkdir -p dist review
+          mkdir -p dist
           go build -trimpath -o dist/${{ matrix.binary }} ./cmd/xpotato-tunnel
-          cp docs/quickstart.md dist/README.md
-          cp docs/quickstart.md dist/quickstart.md
-          cp docs/setup-once-core.md dist/setup-once-core.md
-          cp docs/operations.md dist/operations.md
-          cp docs/setup-env.md dist/setup-env.md
-          cp docs/runtime-ux.md dist/runtime-ux.md
-          cp docs/performance-review.md dist/performance-review.md
-          cp -R docs/performance-results dist/performance-results
-          cp setup.env.example dist/setup.env.example
-          (cd dist && sha256sum ${{ matrix.binary }} > SHA256SUMS)
-          go version -m dist/${{ matrix.binary }} > dist/build-info.txt
-          tar -czf review/xpotato-tunnel-${{ matrix.platform }}.tar.gz -C dist .
-          verify_dir=$(mktemp -d)
-          tar -xzf review/xpotato-tunnel-${{ matrix.platform }}.tar.gz -C "$verify_dir"
-          (cd "$verify_dir" && sha256sum -c SHA256SUMS && ./${{ matrix.binary }} version)
-          if [[ '${{ matrix.platform }}' == linux-* ]]; then test -x "$verify_dir/${{ matrix.binary }}"; fi
+          python scripts/package-review.py --binary dist/${{ matrix.binary }} --output dist/package --platform ${{ matrix.platform }}
+      - name: Windows checksums through documented PowerShell procedure
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location dist/package/content
+          foreach ($line in Get-Content -LiteralPath ./SHA256SUMS) {
+            if ($line -notmatch '^([0-9a-fA-F]{64}) [ *](.+)$') { throw 'Invalid SHA256SUMS' }
+            $expected = $Matches[1]
+            $file = $Matches[2]
+            if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $expected) {
+              throw "SHA256 mismatch: $file"
+            }
+          }
+          ./xpotato-tunnel.exe version
+          if ($LASTEXITCODE -ne 0) { throw 'version command failed' }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: runner.os == 'Windows'
         with:
-          name: xpotato-tunnel-${{ matrix.platform }}-${{ github.event.pull_request.head.sha || github.sha }}
-          path: review/
+          name: ${{ steps.package.outputs.name }}
+          path: dist/package/content/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: runner.os == 'Linux'
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            dist/package/*.tar.gz
+            dist/package/*.sha256
           if-no-files-found: error
           retention-days: 14
   activity-tests:

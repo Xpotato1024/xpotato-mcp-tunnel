@@ -2,11 +2,11 @@
 
 現行入口は `cmd/xpotato-tunnel` のGoコアです。PS/cmd/shは保存済みexeへ引数を渡し、Desktop Commanderだけに固定Nodeを使います。旧Node CLIと専用テスト/npm入口はGit追跡コードから撤去しました。既存core/shim更新互換と旧版保持は維持しています。まず [導入・更新の入口](quickstart.md) を参照してください。
 
-採用済みmainは0.2.6（`5d2c32c1`）、0.2.7はレビュー候補です。[表示仕様](runtime-ux.md)、[非秘密.env入力](setup-env.md)、[確認・診断](operations.md)を参照してください。公開配布先やインストーラは追加していません。
+採用済みmainは0.2.7（`0fc6ceb3`）、このPRの配布候補は0.2.8です。[表示仕様](runtime-ux.md)、[非秘密.env入力](setup-env.md)、[確認・診断](operations.md)を参照してください。Releaseの発行やインストーラの追加は行いません。
 
 ## 本人による導入
 
-CI の artifact ZIP 内には OS 別の tar.gz が入っています。Linux は `tar -xzf xpotato-tunnel-linux-amd64.tar.gz`、展開先で `sha256sum -c SHA256SUMS` と `./xpotato-tunnel version` を実行します。実行権限は tar に保持され、追加の chmod は不要です。Windows は `tar -xzf .\xpotato-tunnel-windows-amd64.tar.gz` で展開し、`Get-FileHash .\xpotato-tunnel.exe -Algorithm SHA256` を SHA256SUMS と比較します。CI は実際に展開・チェックサム確認・version 実行を検証します。
+Windowsの新artifact ZIPは一度の展開でexeとガイドが出ます。Linuxは外側ZIP内のtar.gzを展開し、実行権限を保持します。旧0.2.7の二重包装を含む入手先・展開・checksum/version確認は[quickstart](quickstart.md)にまとめています。CIは実際に展開・全checksum確認・version実行まで検証します。
 
 PR の Windows／Linux CI は、実行ファイル・SHA256SUMS・build-info・手順を private review artifact にまとめます。本人はレビュー済み head に対応する artifact を取得し、チェックサムを確認して通常ユーザーで実行します。本人の端末へ Go SDK を導入する必要はありません。公開リリースやアカウント上のプラグイン登録は実施しません。
 
