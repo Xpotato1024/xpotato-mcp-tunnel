@@ -39,9 +39,18 @@ jobs:
         id: package
         shell: bash
         run: |
-          mkdir -p dist
+          mkdir -p dist/rebuild
           go build -trimpath -o dist/${{ matrix.binary }} ./cmd/xpotato-tunnel
+          go build -trimpath -o dist/rebuild/${{ matrix.binary }} ./cmd/xpotato-tunnel
+          cmp dist/${{ matrix.binary }} dist/rebuild/${{ matrix.binary }}
           python scripts/package-review.py --binary dist/${{ matrix.binary }} --output dist/package --platform ${{ matrix.platform }}
+          python scripts/package-review.py --binary dist/${{ matrix.binary }} --output dist/release --platform ${{ matrix.platform }} --release
+          python scripts/package-review.py --binary dist/${{ matrix.binary }} --output dist/release-repeat --platform ${{ matrix.platform }} --release
+          if [[ '${{ matrix.platform }}' == windows-* ]]; then
+            cmp dist/release/*.zip dist/release-repeat/*.zip
+          else
+            cmp dist/release/*.tar.gz dist/release-repeat/*.tar.gz
+          fi
       - name: Windows checksums through documented PowerShell procedure
         if: runner.os == 'Windows'
         shell: pwsh
@@ -72,6 +81,16 @@ jobs:
           path: |
             dist/package/*.tar.gz
             dist/package/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload release candidate (no publishing)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-candidate-${{ steps.package.outputs.name }}
+          path: |
+            dist/release/*.zip
+            dist/release/*.tar.gz
+            dist/release/*.sha256
           if-no-files-found: error
           retention-days: 14
   activity-tests:

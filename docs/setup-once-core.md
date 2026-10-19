@@ -2,13 +2,13 @@
 
 現行入口は `cmd/xpotato-tunnel` のGoコアです。PS/cmd/shは保存済みexeへ引数を渡し、Desktop Commanderだけに固定Nodeを使います。旧Node CLIと専用テスト/npm入口はGit追跡コードから撤去しました。既存core/shim更新互換と旧版保持は維持しています。まず [導入・更新の入口](quickstart.md) を参照してください。
 
-採用済みmainは0.2.7（`0fc6ceb3`）、このPRの配布候補は0.2.8です。[表示仕様](runtime-ux.md)、[非秘密.env入力](setup-env.md)、[確認・診断](operations.md)を参照してください。Releaseの発行やインストーラの追加は行いません。
+正式配布は[Release v0.2.8](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.8)です。[表示仕様](runtime-ux.md)、[非秘密.env入力](setup-env.md)、[確認・診断](operations.md)を参照してください。インストーラの追加はありません。
 
 ## 本人による導入
 
-Windowsの新artifact ZIPは一度の展開でexeとガイドが出ます。Linuxは外側ZIP内のtar.gzを展開し、実行権限を保持します。旧0.2.7の二重包装を含む入手先・展開・checksum/version確認は[quickstart](quickstart.md)にまとめています。CIは実際に展開・全checksum確認・version実行まで検証します。
+ReleaseのWindows ZIPは一度の展開でexeとガイドが出ます。LinuxはReleaseのtar.gzを直接展開し、実行権限を保持します。ActionsレビューartifactだけはLinuxの外側にZIPがあります。旧0.2.7の二重包装を含む入手先・展開・checksum/version確認は[quickstart](quickstart.md)にまとめています。CIは実際に展開・全checksum確認・version実行まで検証します。
 
-PR の Windows／Linux CI は、実行ファイル・SHA256SUMS・build-info・手順を private review artifact にまとめます。本人はレビュー済み head に対応する artifact を取得し、チェックサムを確認して通常ユーザーで実行します。本人の端末へ Go SDK を導入する必要はありません。公開リリースやアカウント上のプラグイン登録は実施しません。
+Windows／Linux CIは、実行ファイル・SHA256SUMS・build-info・手順をレビュー用artifactとRelease候補にまとめます。通常利用は上記Releaseを取得し、checksumを確認して通常ユーザーで実行します。本人の端末へGo SDKを導入する必要はありません。アカウント上のプラグイン登録は本人が行います。
 
 ```powershell
 # Windows: 本人の通常権限の対話端末で実行する。

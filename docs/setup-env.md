@@ -1,6 +1,6 @@
 # 非秘密 .env による Setup と同じ端末の更新
 
-Goコアの`--env-file`は、本人が許可範囲やTunnel IDを変更するときの入力補助です。通常の版更新にはSetupやキー再入力を使わず、新exeの`update`を実行します。[導入・更新の入口](quickstart.md)を参照してください。採用済みmainは0.2.7、今回の0.2.8は配布レビュー候補です。
+Goコアの`--env-file`は、本人が許可範囲やTunnel IDを変更するときの入力補助です。通常の版更新にはSetupやキー再入力を使わず、正式Releaseの新exeから`update`を実行します。[導入・更新の入口](quickstart.md)を参照してください。正式配布は[Release v0.2.8](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.8)です。
 
 ## 推奨形式
 
