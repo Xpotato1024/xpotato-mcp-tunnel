@@ -2,6 +2,8 @@
 
 この手順は管理者向けです。利用者は[quickstart](quickstart.md)へ進みます。正式配布は[Release v0.2.8](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.8)です。CIは候補を作るだけで、push/PRからRelease、tag、deployを行いません。公開は本人の明示承認後に管理者が手動で行います。
 
+現在のソースは起動ログ設定を修正した**0.2.9の候補（未公開）**です。生成名はコアの版から決まり、次版候補は`xpotato-tunnel-0.2.9-windows-amd64.zip`／`xpotato-tunnel-0.2.9-linux-amd64.tar.gz`になります。既存v0.2.8のtag/assetsは変更しません。公開する場合は採用mainの再検証と、新版tag・Releaseへの本人の明示承認が必要です。
+
 ## 配布形式
 
 | 用途 | Windows amd64 | Linux amd64 |

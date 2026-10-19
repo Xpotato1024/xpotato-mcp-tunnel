@@ -90,7 +90,7 @@ func TestDiagnosticLevelKeepsSafetyAndRoutingFlags(t *testing.T) {
 		if diagnostics {
 			level = "info"
 		}
-		for flag, want := range map[string]string{"--log.level": level, "--log.file": "", "--control-plane.base-url": "https://api.openai.com", "--control-plane.poll-channel": "main", "--control-plane.max-inflight": "1", "--mcp.max-concurrent-requests": "1", "--control-plane.api-key": "env:CONTROL_PLANE_API_KEY"} {
+		for flag, want := range map[string]string{"--log.level": level, "--log.format": "struct-text", "--log.file": "", "--control-plane.base-url": "https://api.openai.com", "--control-plane.poll-channel": "main", "--control-plane.max-inflight": "1", "--mcp.max-concurrent-requests": "1", "--control-plane.api-key": "env:CONTROL_PLANE_API_KEY"} {
 			found := false
 			for i, arg := range args {
 				if arg == flag && i+1 < len(args) && args[i+1] == want {

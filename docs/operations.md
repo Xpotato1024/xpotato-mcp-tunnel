@@ -12,6 +12,20 @@
 | 許可範囲の不一致 | 同じdeviceのsetupで差分確認。無断config編集や範囲拡張をしない |
 | 資格情報が利用不可 | Windowsは同じ通常ユーザー、Linuxは同じUIDと解除済み保管庫を確認。credentialsは本人同意・非表示入力で該当一レコードを更新 |
 
+## v0.2.8のログ設定エラー
+
+公開済みv0.2.8の通常起動では、資格情報取得・子プロセス準備後に`configure tunnel-client runtime: log level requires 'struct-text' or 'json' log format`と表示され、子プロセスがexit 1になる不具合があります。通常起動の`warn`と未指定ログ形式の組合せを固定Tunnel 0.0.16が拒否するためです。キー不正を示すエラーではなく、設定削除・キー再登録やruntimeファイルの手編集では解決しません。
+
+本人が元の起動プロセスの終了を確認してから、公開CLIの次の指定を使えます。同じ既存home/deviceを選び、普段必要な`--home`／`--device`指定があればそのまま付けます。
+
+```text
+xpotato-tunnel start --diagnostics
+```
+
+この起動だけ`info`を選び、v0.2.8のログ設定エラーを回避します。保存設定・runtime整合性・資格情報は変更しません。内部INFOと相関ID等の表示が増えますが、HTTP raw logは無効、ツール引数表示も別オプションのままです。固定実バイナリの設定検証で確認した回避であり、実認証・外向きHTTPS・ChatGPT登録・MCP操作の成功は別に確認が必要です。
+
+修正候補0.2.9は通常`warn`／診断`info`の両方に`struct-text`を指定します。未公開のため、公開済みv0.2.8の同名assetを置き換えません。正式な新Releaseの承認後、本人が新exeの`update`を実行する経路を使います。新しい版を入手するまでは同版のCI再ビルドへのupdateはしないでください。
+
 ## 診断表示を明示する
 
 本人が旧接続を終了してから、短いコマンドで次を実行します。
@@ -28,7 +42,7 @@ stderrは1行4KiB、各queueは書込み中を含め64KiBです。長い行や�
 
 ## doctorと保存先
 
-`doctor`は保存先とinstall lock、`doctor --device 端末名`はその設定・runtime/lock整合性を読み取ります。資格情報の値、実接続、アカウント登録は検査しません。成功だけでオンライン/MCP成功とは判定しません。
+`doctor`は保存先とinstall lock、`doctor --device 端末名`はその設定・runtime/lock整合性を読み取ります。runtime検証はreceiptと全ファイルのhash・固定版の照合で、起動引数を実行する設定検証ではありません。資格情報の値、実接続、アカウント登録も検査しません。成功だけで起動設定の受理・オンライン/MCP成功とは判定しません。
 
 恒久homeにはcore、releases、devices、command-install metadataとロック、キーはOS保管庫にあります。配布フォルダーと恒久homeは別です。通常のupdateは旧core/runtimeや設定を削除しません。rollbackは現コアが認識する保存済みruntimeに限ります。
 

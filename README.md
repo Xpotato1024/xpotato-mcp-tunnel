@@ -4,6 +4,8 @@ Windows/Linux amd64で、端末内のDesktop CommanderをOpenAIトンネルに�
 
 正式配布は **[v0.2.8](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.8)** です。同版の異なるバイナリを上書きしないため、既存0.2.7から更新する場合もこのReleaseのexeを使います。`setup`/`update`は固定版のNode・Commander・Tunnelをネットワークから取得します。配布物は完全オフライン用runtime同梱版ではありません。旧Node CLIは撤去済みです。
 
+**v0.2.8の通常起動にはログ設定による起動障害があります。** `log level requires 'struct-text' or 'json' log format`で終了する場合、[一時的な起動方法](docs/operations.md#v028のログ設定エラー)を使います。このソースの修正候補は**0.2.9（未公開）**です。公開済みtag/assetsは変更せず、正式配布には別途レビュー・merge・Release承認が必要です。
+
 ## 使い始める・更新する
 
 [導入の入口](docs/quickstart.md) に、入手先の選び方、展開、checksum/version確認、新規Setup、既存環境のupdate、起動・停止をまとめています。
