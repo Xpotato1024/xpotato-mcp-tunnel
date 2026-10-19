@@ -39,7 +39,9 @@ func init() {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	fmt.Fprintln(os.Stdout, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+	// Structured upstream logging uses the runtime's stdout by default. This
+	// stream is not the private runtime-to-MCP stdio pipe.
+	fmt.Fprintln(os.Stdout, "WARN structured fixture key="+os.Getenv("CONTROL_PLANE_API_KEY"))
 	os.Exit(0) // Descendant intentionally retains stderr; owned cleanup must finish.
 }
 
@@ -51,7 +53,7 @@ func TestStderrOwnedLeaf(t *testing.T) {
 	time.Sleep(30 * time.Second)
 }
 
-func TestManagedStderrPipeCannotHoldOwnedCleanupOpen(t *testing.T) {
+func TestManagedLogPipesCannotHoldOwnedCleanupOpen(t *testing.T) {
 	home := t.TempDir()
 	release := filepath.Join(home, "releases", "fixture")
 	profile := filepath.Join(home, "devices", "fixture", "profile")
@@ -87,7 +89,7 @@ func TestManagedStderrPipeCannotHoldOwnedCleanupOpen(t *testing.T) {
 	protocol, _ := io.ReadAll(stdout)
 	stderr.Seek(0, 0)
 	logs, _ := io.ReadAll(stderr)
-	if string(protocol) != "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n" || strings.Contains(string(logs), "synthetic-stderr-fixture-key") || !strings.Contains(string(logs), "WARN fixture") {
+	if len(protocol) != 0 || strings.Contains(string(logs), "synthetic-stderr-fixture-key") || !strings.Contains(string(logs), "WARN fixture") || !strings.Contains(string(logs), "WARN structured fixture") {
 		t.Fatal("unsafe or missing output")
 	}
 	for _, b := range key {

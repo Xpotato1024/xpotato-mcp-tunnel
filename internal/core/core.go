@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const Version = "0.2.8"
+const Version = "0.2.9"
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 var tunnelPattern = regexp.MustCompile(`^tunnel_[a-zA-Z0-9_-]+$`)

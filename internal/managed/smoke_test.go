@@ -34,6 +34,9 @@ func TestManagedInstallSmoke(t *testing.T) {
 		t.Fatal(e)
 	}
 	dir := filepath.Join(home, "releases", id)
+	// Integrity/version and direct stdio success do not validate the Go
+	// launcher's tunnel-client arguments. Exercise that path before MCP smoke.
+	testPinnedRuntimeStartupConfiguration(t, filepath.Join(dir, executable()))
 	node, _ := nodeFiles(dir)
 	for _, entry := range []struct {
 		file string

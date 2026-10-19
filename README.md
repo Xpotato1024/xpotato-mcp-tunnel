@@ -2,14 +2,16 @@
 
 Windows/Linux amd64で、端末内のDesktop CommanderをOpenAIトンネルにつなぐGoコアです。Laptopで使うものは **Windows amd64用の配布物に入っている `xpotato-tunnel.exe`** です。Go/Node/npmやソースコードの事前導入は不要です。通常ユーザーが一度Setupし、次回から保存済みキーで起動できます。
 
-正式配布は **[v0.2.8](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.8)** です。同版の異なるバイナリを上書きしないため、既存0.2.7から更新する場合もこのReleaseのexeを使います。`setup`/`update`は固定版のNode・Commander・Tunnelをネットワークから取得します。配布物は完全オフライン用runtime同梱版ではありません。旧Node CLIは撤去済みです。
+正式配布は **[v0.2.9](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.9)** です。同版の異なるバイナリを上書きしないため、既存0.2.7／0.2.8から更新する場合もこのReleaseのexeを使います。`setup`/`update`は固定版のNode・Commander・Tunnelをネットワークから取得します。配布物は完全オフライン用runtime同梱版ではありません。旧Node CLIは撤去済みです。
+
+**v0.2.9は通常起動のログ設定エラーを修正しています。** 旧v0.2.8で`log level requires 'struct-text' or 'json' log format`と終了した場合も、新exeの`update`で既存設定・保存済みキー・Tunnel IDを維持して更新します。[旧版の障害と一時的な起動方法](docs/operations.md#v028のログ設定エラー)も参照できます。旧版tag/assetsは上書きしません。
 
 ## 使い始める・更新する
 
 [導入の入口](docs/quickstart.md) に、入手先の選び方、展開、checksum/version確認、新規Setup、既存環境のupdate、起動・停止をまとめています。
 
-- Windows Laptop: [v0.2.8 ZIP](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.8/xpotato-tunnel-0.2.8-windows-amd64.zip)と[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.8/xpotato-tunnel-0.2.8-windows-amd64.zip.sha256)。一度展開するとexeとガイドが出ます。
-- Linux: [v0.2.8 tar.gz](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.8/xpotato-tunnel-0.2.8-linux-amd64.tar.gz)と[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.8/xpotato-tunnel-0.2.8-linux-amd64.tar.gz.sha256)。
+- Windows Laptop: [v0.2.9 ZIP](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-windows-amd64.zip)と[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-windows-amd64.zip.sha256)。一度展開するとexeとガイドが出ます。
+- Linux: [v0.2.9 tar.gz](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-linux-amd64.tar.gz)と[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-linux-amd64.tar.gz.sha256)。
 - privateリポジトリのためアクセス権とGitHubログインが必要です。[Actions](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/workflows/windows-tests.yml)の14日期限artifactはレビュー・検証用で、正式導入にはReleaseを選びます。
 
 WindowsはZIPと同名の`.zip.sha256`を両方保存し、[quickstartの検証ブロック](docs/quickstart.md)をまとめて実行してください。不足やchecksumエラーの後に、展開の行だけを続けて実行しません。既に展開済みのフォルダーは再展開せず検証できます。

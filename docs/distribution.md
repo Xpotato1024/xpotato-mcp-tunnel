@@ -1,13 +1,15 @@
 # 配布候補と版付きRelease
 
-この手順は管理者向けです。利用者は[quickstart](quickstart.md)へ進みます。正式配布は[Release v0.2.8](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.8)です。CIは候補を作るだけで、push/PRからRelease、tag、deployを行いません。公開は本人の明示承認後に管理者が手動で行います。
+この手順は管理者向けです。利用者は[quickstart](quickstart.md)へ進みます。正式配布は[Release v0.2.9](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.9)です。CIは候補を作るだけで、push/PRからRelease、tag、deployを行いません。公開は本人の明示承認後に管理者が手動で行います。
+
+v0.2.9は起動ログ設定を修正した新しい版です。生成名はコアの版から決まり、既存v0.2.8のtag/assetsは変更しません。以後の公開にも採用mainの再検証と、新版tag・Releaseへの本人の明示承認が必要です。
 
 ## 配布形式
 
 | 用途 | Windows amd64 | Linux amd64 |
 |---|---|---|
 | Actionsレビュー | artifact ZIPを一度展開してexeとガイド | artifact ZIP内のtar.gzを展開 |
-| 手動Release | `xpotato-tunnel-0.2.8-windows-amd64.zip` | `xpotato-tunnel-0.2.8-linux-amd64.tar.gz` |
+| 手動Release | `xpotato-tunnel-0.2.9-windows-amd64.zip` | `xpotato-tunnel-0.2.9-linux-amd64.tar.gz` |
 
 内容はコア、quickstartと関連ガイド、非秘密の`setup.env.example`、全ファイルの`SHA256SUMS`、`build-info.json`、Goの`build-info.txt`です。Node/Commander/Tunnel実体や資格情報は含めません。初回setup/updateは固定runtimeを取得するため通信が必要です。runtimeの取得仕様は[setup-once-core](setup-once-core.md)を参照してください。
 

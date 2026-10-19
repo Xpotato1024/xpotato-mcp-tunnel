@@ -28,7 +28,7 @@ $content = Join-Path $fixtureRoot 'content'
 New-Item -ItemType Directory -Path $content | Out-Null
 Copy-Item -LiteralPath $binary -Destination (Join-Path $content 'xpotato-tunnel.exe')
 [IO.File]::WriteAllText((Join-Path $content 'README.md'), 'fixture payload')
-[IO.File]::WriteAllText((Join-Path $content 'build-info.json'), '{"version":"0.2.8","platform":"windows-amd64"}')
+[IO.File]::WriteAllText((Join-Path $content 'build-info.json'), '{"version":"0.2.9","platform":"windows-amd64"}')
 $sums = @('README.md', 'build-info.json', 'xpotato-tunnel.exe') | ForEach-Object {
     '{0}  {1}' -f (Get-FileHash -LiteralPath (Join-Path $content $_) -Algorithm SHA256).Hash, $_
 }
@@ -51,8 +51,8 @@ function Invoke-DocumentedExample {
         & $singleBlock -ArchivePath $ArchivePath -DestinationPath $DestinationPath -VerifyExisting:$VerifyExisting
     } else {
         # Red-test the old example as lines/statements pasted into an interactive prompt.
-        $legacy = $example.Replace('$HOME\Downloads\xpotato-tunnel-0.2.8-windows-amd64.zip', $ArchivePath).
-            Replace('$HOME\Apps\xpotato-tunnel-0.2.8', $DestinationPath)
+        $legacy = $example.Replace('$HOME\Downloads\xpotato-tunnel-0.2.9-windows-amd64.zip', $ArchivePath).
+            Replace('$HOME\Apps\xpotato-tunnel-0.2.9', $DestinationPath)
         $legacyErrors = $null
         $legacyTokens = $null
         $legacySyntax = [System.Management.Automation.Language.Parser]::ParseInput($legacy, [ref] $legacyTokens, [ref] $legacyErrors)
@@ -66,11 +66,11 @@ function Test-Case {
           [switch] $Existing, [switch] $VerifyExisting)
     $case = Join-Path $fixtureRoot $Name
     New-Item -ItemType Directory -Path $case | Out-Null
-    $archive = Join-Path $case 'xpotato-tunnel-0.2.8-windows-amd64.zip'
+    $archive = Join-Path $case 'xpotato-tunnel-0.2.9-windows-amd64.zip'
     $destination = Join-Path $case 'expanded'
     Copy-Item -LiteralPath $template -Destination $archive
     if ($Mode -eq 'wrong-download-name') {
-        $renamed = Join-Path $case 'xpotato-tunnel-0.2.8-windows-amd64 (1).zip'
+        $renamed = Join-Path $case 'xpotato-tunnel-0.2.9-windows-amd64 (1).zip'
         Move-Item -LiteralPath $archive -Destination $renamed
         $archive = $renamed
     }

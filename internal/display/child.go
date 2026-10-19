@@ -91,8 +91,9 @@ func childText(s string, color bool) string {
 	return out.String() + "\n"
 }
 
-// ChildWriter drains only stderr, never protocol stdout/stdin. One partial
-// line is bounded to 4KiB; its async queue (including active write) to 64KiB.
+// ChildWriter drains tunnel-runtime log streams, never the private MCP stdio
+// pipes owned by that runtime. One partial line is bounded to 4KiB; its async
+// queue (including active write) to 64KiB.
 // A blocked or failed display cannot stall the child's protocol/cleanup.
 type ChildWriter struct {
 	mu                sync.Mutex
