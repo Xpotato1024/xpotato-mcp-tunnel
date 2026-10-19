@@ -24,7 +24,7 @@ xpotato-tunnel start --diagnostics
 
 この起動だけ`info`を選び、v0.2.8のログ設定エラーを回避します。保存設定・runtime整合性・資格情報は変更しません。内部INFOと相関ID等の表示が増えますが、HTTP raw logは無効、ツール引数表示も別オプションのままです。固定実バイナリの設定検証で確認した回避であり、実認証・外向きHTTPS・ChatGPT登録・MCP操作の成功は別に確認が必要です。
 
-修正候補0.2.9は通常`warn`／診断`info`の両方に`struct-text`を指定します。未公開のため、公開済みv0.2.8の同名assetを置き換えません。正式な新Releaseの承認後、本人が新exeの`update`を実行する経路を使います。新しい版を入手するまでは同版のCI再ビルドへのupdateはしないでください。
+正式版v0.2.9は通常`warn`／診断`info`の両方に`struct-text`を指定し、この設定エラーを修正しています。公開済みv0.2.8の同名assetは置き換えません。本人が[新しい正式Release](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.9)のexeから`update`を実行し、保存更新の完了後に旧プロセスを停止・終了確認して、普段の短い起動コマンドで再開します。同じhome/deviceの設定・保存済みキー・Tunnel IDを維持し、Setupやキー再登録は通常不要です。同版CI再ビルドへのupdateはしないでください。
 
 ## 診断表示を明示する
 
@@ -38,7 +38,7 @@ upstreamのINFO（起動情報、dispatcher、相関ID等）をstderrへ表示�
 
 ツール引数は別に`start --activity-details`を明示します。--diagnosticsだけでは引数表示を有効にしません。本文・結果や未知の引数の収集機能ではありません。共有前はファイル名や操作の相関情報を本人が確認してください。
 
-stderrは1行4KiB、各queueは書込み中を含め64KiBです。長い行や混雑は可能な範囲で省略通知を出します。遅い/壊れた表示先で処理・回収を止めません。省略があり得るため完全な監査記録とは扱いません。stdoutはMCP経路として保持します。
+stderrは1行4KiB、各queueは書込み中を含め64KiBです。長い行や混雑は可能な範囲で省略通知を出します。遅い/壊れた表示先で処理・回収を止めません。省略があり得るため完全な監査記録とは扱いません。runtime自身のstdout/stderrログはコアのstderrへ送り、runtimeとCommander間の専用MCP入出力は保持します。
 
 ## doctorと保存先
 
