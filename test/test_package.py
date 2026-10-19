@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -15,6 +16,27 @@ spec.loader.exec_module(packaging)
 
 
 class PackageTests(unittest.TestCase):
+    def test_reproducible_release_archives(self):
+        for platform in ("windows-amd64", "linux-amd64"):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                binary = root / "binary"
+                binary.write_bytes(b"fixed binary")
+                inputs = dict(version="0.2.8", commit="b" * 40, platform=platform,
+                              dirty=False, epoch=1792392030, release=True)
+                first, content = packaging.assemble(binary, root / "first", **inputs,
+                                                     build_info="/first/path: go1.27.2\n\tbuild\tGOARCH=amd64\n")
+                os.utime(binary, (1000000000, 1000000000))
+                second, _ = packaging.assemble(binary, root / "second", **inputs,
+                                                build_info="C:\\other\\path: go1.27.2\n\tbuild\tGOARCH=amd64\n")
+                self.assertEqual(packaging.sha256(first), packaging.sha256(second))
+                self.assertNotIn("b" * 40, first.name)
+                self.assertEqual(json.loads((content / "build-info.json").read_text())["sourceDateEpoch"], 1792392030)
+                if platform.startswith("linux"):
+                    with tarfile.open(first) as tar:
+                        self.assertTrue(all(m.uid == 0 and m.gid == 0 and m.mtime == 1792392030
+                                            for m in tar.getmembers()))
+
     def test_build_provenance(self):
         commit = "a" * 40
         info = (f"\tbuild\tGOOS=windows\n\tbuild\tGOARCH=amd64\n"

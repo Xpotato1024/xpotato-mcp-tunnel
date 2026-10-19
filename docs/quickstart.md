@@ -8,20 +8,25 @@ WindowsのLaptopには **Windows amd64版の`xpotato-tunnel.exe`と同じ配布�
 
 `setup`/`update`はNode 24.14.0、Commander 0.2.52、Tunnel 0.0.16と固定lockの依存を取得します。初回はnodejs.org、GitHub Releasesとその配信先、registry.npmjs.orgへのHTTPS接続が必要です。完全オフライン用パッケージではありません。起動時にもOpenAIへの外向きHTTPSが必要です。
 
-1. [Releases](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases)に採用済みの版があれば、その版の`xpotato-tunnel-<version>-windows-amd64-<commit>.zip`を取得します。2026-10-19時点ではRelease/tagは未作成です。
-2. 現在はGitHubにログインして[Cross-platform checks](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/workflows/windows-tests.yml)を開き、branchが`main`、結果が成功のrunを選びます。runのcommitと、管理者が採用したcommitが一致することを確認します。PRのrunはレビュー専用です。
-3. run下部のArtifactsから`xpotato-tunnel-…-windows-amd64-<commit>`をダウンロードします。Linuxなら`linux-amd64`です。versionとcommitを含む新しい名前は本修正の採用後のrunからです。旧runの名前はOSとcommitのみです。
+1. GitHubにログインして[正式Release v0.2.8](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.8)を開きます。privateリポジトリへのアクセス権が必要です。
+2. Windowsは[ZIP](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.8/xpotato-tunnel-0.2.8-windows-amd64.zip)と[同名の.sha256](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.8/xpotato-tunnel-0.2.8-windows-amd64.zip.sha256)を同じDownloadsフォルダーへ保存します。Linuxは[tar.gz](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.8/xpotato-tunnel-0.2.8-linux-amd64.tar.gz)と[.sha256](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.8/xpotato-tunnel-0.2.8-linux-amd64.tar.gz.sha256)です。
+3. 下記の外側archiveと内部ファイルのchecksum、version、`build-info.json`のcommitをRelease本文のsource commitと照合します。「Source code」のZIP/tar.gzは実行用配布物ではありません。
 
-artifactは14日で失効します。ない場合は別OSや別PRのartifactで代用せず、管理者に同じ採用commitの再ビルドか版付きReleaseを依頼してください。GitHubログインできない場合も管理者へ確認します。
+ReleaseにはActions artifactの14日期限はありません。[Actions](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/workflows/windows-tests.yml)は開発・レビュー用です。CI再ビルドは同じ版でもbytesが変わり得るため、正式Releaseの代わりに同版artifactへupdateしないでください。取得できない場合は管理者へ確認します。
 
 ## Windowsで展開・確認する
 
-新しいWindows artifactのZIPは一度展開するとexeとガイドが直接出てきます。空のユーザーフォルダーへ展開し、そのフォルダーをPowerShellで開きます。Release用ZIPも同じ構成です。配布フォルダーと設定・キーの恒久保存先は別です。
+ReleaseのWindows ZIPは一度展開するとexeとガイドが直接出てきます。空のユーザーフォルダーへ展開し、そのフォルダーをPowerShellで開きます。配布フォルダーと設定・キーの恒久保存先は別です。
 
 ```powershell
-# 例: ダウンロードしたZIPのパスと、新しく作る保存先を指定
-Expand-Archive -LiteralPath "$HOME\Downloads\取得したファイル名.zip" -DestinationPath "$HOME\Apps\xpotato-tunnel-取得した版"
-Set-Location "$HOME\Apps\xpotato-tunnel-取得した版"
+$ErrorActionPreference = 'Stop'
+$archive = "$HOME\Downloads\xpotato-tunnel-0.2.8-windows-amd64.zip"
+$archiveHash = (Get-Content -LiteralPath "$archive.sha256").Split()[0]
+if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $archiveHash) {
+    throw 'Archive SHA256 mismatch'
+}
+Expand-Archive -LiteralPath $archive -DestinationPath "$HOME\Apps\xpotato-tunnel-0.2.8"
+Set-Location "$HOME\Apps\xpotato-tunnel-0.2.8"
 
 # checksumが一つでも違えば停止。setup前に行う
 $ErrorActionPreference = 'Stop'
@@ -37,7 +42,7 @@ foreach ($line in Get-Content -LiteralPath .\SHA256SUMS) {
 if ($LASTEXITCODE -ne 0) { throw 'version command failed' }
 ```
 
-採用済み旧mainの表示は`0.2.7`、このPRのレビュー候補は`0.2.8`です。新包装では`build-info.json`の`version`、`commit`、`platform`が選んだrunと一致し、`dirty`が`false`であることも確認します。checksumは破損の検出であり、同梱checksumだけで発行元を証明するものではありません。管理者が案内したリポジトリ・runから取得してください。
+表示は`0.2.8`です。`build-info.json`の`version`、`commit`、`platform`がRelease本文と一致し、`dirty`が`false`であることも確認します。checksumは破損の検出であり、同梱checksumだけで発行元を証明するものではありません。管理者が案内したリポジトリのReleaseから取得してください。
 
 ```powershell
 Get-Content -LiteralPath .\build-info.json
@@ -47,9 +52,9 @@ Windowsがexeの発行元を未確認と表示した場合、取得元とchecksu
 
 ### 旧包装のartifact
 
-現在の採用済みmain `0fc6ceb301f1a4d5da95e377af9309e3ab89d584`は[成功run 38204606931](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/runs/38204606931)の`xpotato-tunnel-windows-amd64-0fc6ceb301f1a4d5da95e377af9309e3ab89d584`です。artifact IDは`11726941695`、有効期限は2026-10-26 04:45 UTCです。期限後はこのリンクから取得できません。
+旧0.2.7 main `0fc6ceb301f1a4d5da95e377af9309e3ab89d584`は[成功run 38204606931](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/runs/38204606931)にありました。有効期限は2026-10-26 04:45 UTCです。新規導入は上記v0.2.8 Releaseを使い、この節は旧包装を受領済みの人向けです。
 
-この旧ZIPだけは中に`xpotato-tunnel-windows-amd64.tar.gz`があります。ZIPを空フォルダーへ展開した後、そこで次を実行し、上のchecksum/version確認へ進みます。旧包装には`build-info.json`はなく、runのcommitと`build-info.txt`で確認します。
+この旧ZIPだけは中に`xpotato-tunnel-windows-amd64.tar.gz`があります。ZIPを空フォルダーへ展開した後、そこで次を実行します。その後は上のPowerShell例の**内部`SHA256SUMS`のforeach検証だけ**を使い、versionが`0.2.7`であることを確認します。0.2.8 Release用の外側ZIP checksumや保存先は使いません。旧包装には`build-info.json`はなく、runのcommitと`build-info.txt`で確認します。
 
 ```powershell
 tar -xzf .\xpotato-tunnel-windows-amd64.tar.gz
@@ -58,14 +63,16 @@ if ($LASTEXITCODE -ne 0) { throw 'tar extraction failed' }
 
 ## Linuxで展開・確認する
 
-Linux artifactの外側ZIPを展開してから、中の版・commit付きtar.gzを新しい空フォルダーへ展開します。Releaseではtar.gzを直接取得します。旧包装の名前は`xpotato-tunnel-linux-amd64.tar.gz`です。
+Releaseのtar.gzと.sha256を同じフォルダーへ保存し、そこで確認します。外側のZIPはありません。
 
 ```sh
+set -e
+sha256sum -c xpotato-tunnel-0.2.8-linux-amd64.tar.gz.sha256
 mkdir package
-tar -xzf 取得したファイル名.tar.gz -C package
+tar -xzf xpotato-tunnel-0.2.8-linux-amd64.tar.gz -C package
 cd package
 sha256sum -c SHA256SUMS && ./xpotato-tunnel version
-cat build-info.json # 新包装のみ。選んだrunのcommit・platformと照合
+cat build-info.json # Release本文のcommit・platformと照合
 ```
 
 checksum不一致やversion不一致ならsetupせず、再取得か管理者への確認で解決します。tarにはLinuxの実行権限を保持します。
