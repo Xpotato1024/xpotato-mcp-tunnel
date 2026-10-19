@@ -16,37 +16,83 @@ ReleaseにはActions artifactの14日期限はありません。[Actions](https:
 
 ## Windowsで展開・確認する
 
-ReleaseのWindows ZIPは一度展開するとexeとガイドが直接出てきます。空のユーザーフォルダーへ展開し、そのフォルダーをPowerShellで開きます。配布フォルダーと設定・キーの恒久保存先は別です。
+ReleaseのWindows ZIPは一度展開するとexeとガイドが直接出てきます。配布フォルダーと設定・キーの恒久保存先は別です。
+
+先にDownloadsに次の**2ファイルが両方あること**をエクスプローラーで確認します。拡張子も表示し、`.sha256.txt`、`(1)`付き、途中までのダウンロードではないことを確認してください。足りない場合は上のReleaseからそのファイルを保存します。
+
+- `xpotato-tunnel-0.2.8-windows-amd64.zip`
+- `xpotato-tunnel-0.2.8-windows-amd64.zip.sha256`
+
+次のブロックを`& {`から最後の引数行まで**まとめて**PowerShellへ貼り付けます。ブロック内の行を抜き出して個別実行しないでください。入力・外側checksumが不正なら展開せず停止し、内部checksumやversionに失敗しても後続の処理へ進みません。`検証完了`と表示された場合だけ、次のsetup/updateへ進みます。
 
 ```powershell
-$ErrorActionPreference = 'Stop'
-$archive = "$HOME\Downloads\xpotato-tunnel-0.2.8-windows-amd64.zip"
-$archiveHash = (Get-Content -LiteralPath "$archive.sha256").Split()[0]
-if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $archiveHash) {
-    throw 'Archive SHA256 mismatch'
-}
-Expand-Archive -LiteralPath $archive -DestinationPath "$HOME\Apps\xpotato-tunnel-0.2.8"
-Set-Location "$HOME\Apps\xpotato-tunnel-0.2.8"
-
-# checksumが一つでも違えば停止。setup前に行う
-$ErrorActionPreference = 'Stop'
-foreach ($line in Get-Content -LiteralPath .\SHA256SUMS) {
-    if ($line -notmatch '^([0-9a-fA-F]{64}) [ *](.+)$') { throw 'Invalid SHA256SUMS' }
-    $expected = $Matches[1]
-    $file = $Matches[2]
-    if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $expected) {
-        throw "SHA256 mismatch: $file"
+& {
+    param([string] $ArchivePath, [string] $DestinationPath, [switch] $VerifyExisting)
+    $ErrorActionPreference = 'Stop'
+    $archiveName = 'xpotato-tunnel-0.2.8-windows-amd64.zip'
+    if ([IO.Path]::GetFileName($ArchivePath) -ne $archiveName) {
+        throw "Download name must be $archiveName (no (1) suffix)"
     }
-}
-.\xpotato-tunnel.exe version
-if ($LASTEXITCODE -ne 0) { throw 'version command failed' }
+    foreach ($inputFile in @($ArchivePath, "$ArchivePath.sha256")) {
+        if (-not (Test-Path -LiteralPath $inputFile -PathType Leaf)) {
+            throw "Required download missing: $inputFile (check the full extension)"
+        }
+    }
+    $checksumText = [string] (Get-Content -LiteralPath "$ArchivePath.sha256" -Raw)
+    $checksum = [regex]::Match($checksumText.Trim(), '^([0-9a-fA-F]{64}) [ *]([^\r\n]+)$')
+    if (-not $checksum.Success -or $checksum.Groups[2].Value -ne $archiveName) {
+        throw 'Invalid archive checksum file or filename'
+    }
+    if ((Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash -ne $checksum.Groups[1].Value) {
+        throw 'Archive SHA256 mismatch; do not extract or run setup'
+    }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        $manifest = $zip.GetEntry('SHA256SUMS')
+        if ($null -eq $manifest) { throw 'ZIP checksum manifest missing' }
+        $reader = [IO.StreamReader]::new($manifest.Open())
+        try { $expectedManifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } finally { $zip.Dispose() }
+    if (Test-Path -LiteralPath $DestinationPath) {
+        if (-not $VerifyExisting -or -not (Test-Path -LiteralPath $DestinationPath -PathType Container)) {
+            throw 'Destination exists; keep it. Use another new path, or -VerifyExisting to check without extracting'
+        }
+    } elseif ($VerifyExisting) {
+        throw 'Existing destination not found; nothing was extracted'
+    } else {
+        Expand-Archive -LiteralPath $ArchivePath -DestinationPath $DestinationPath
+    }
+    $actualManifest = [IO.File]::ReadAllText((Join-Path $DestinationPath 'SHA256SUMS'))
+    if ($actualManifest -cne $expectedManifest) { throw 'Checksum manifest differs from verified ZIP; existing files preserved' }
+    $lines = @($expectedManifest -split '\r?\n' | Where-Object { $_.Length -gt 0 })
+    if ($lines.Count -eq 0) { throw 'Empty SHA256SUMS' }
+    $binaryChecked = $false
+    foreach ($line in $lines) {
+        $entry = [regex]::Match($line, '^([0-9a-fA-F]{64}) [ *]([a-zA-Z0-9._/-]+)$')
+        if (-not $entry.Success) { throw 'Invalid SHA256SUMS' }
+        $relative = $entry.Groups[2].Value
+        if ([IO.Path]::IsPathRooted($relative) -or ($relative.Split('/') -contains '..')) {
+            throw 'Invalid checksum path'
+        }
+        $file = Join-Path $DestinationPath $relative
+        if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.Groups[1].Value) {
+            throw "SHA256 mismatch: $relative"
+        }
+        if ($relative -eq 'xpotato-tunnel.exe') { $binaryChecked = $true }
+    }
+    if (-not $binaryChecked) { throw 'Binary checksum missing' }
+    $version = & (Join-Path $DestinationPath 'xpotato-tunnel.exe') version
+    if ($LASTEXITCODE -ne 0 -or $version -ne '0.2.8') { throw 'version mismatch' }
+    Get-Content -LiteralPath (Join-Path $DestinationPath 'build-info.json')
+    Set-Location -LiteralPath $DestinationPath
+    Write-Host "検証完了: $DestinationPath (version $version)"
+} -ArchivePath "$HOME\Downloads\xpotato-tunnel-0.2.8-windows-amd64.zip" -DestinationPath "$HOME\Apps\xpotato-tunnel-0.2.8"
 ```
 
-表示は`0.2.8`です。`build-info.json`の`version`、`commit`、`platform`がRelease本文と一致し、`dirty`が`false`であることも確認します。checksumは破損の検出であり、同梱checksumだけで発行元を証明するものではありません。管理者が案内したリポジトリのReleaseから取得してください。
+既に展開済みなら再展開は不要です。ZIPと`.zip.sha256`を揃え、同じブロックの最後の引数行に`-VerifyExisting`を追加すると、外側archive、検証済みZIP内の一覧と既存`SHA256SUMS`の一致、内部ファイル・versionだけを確認します。既存のファイルは上書き・削除しません。新規展開を選ぶ場合は別の未使用の`-DestinationPath`を指定してください。
 
-```powershell
-Get-Content -LiteralPath .\build-info.json
-```
+途中でエラーになったらsetup/updateへ進まず、不足ファイル・名前・checksumの原因を解決して**ブロック全体**を再実行します。展開後の検証で停止したフォルダーも自動削除しません。表示された`build-info.json`の`version`、`commit`、`platform`がRelease本文と一致し、`dirty`が`false`であることも確認します。checksumは破損の検出であり、同梱checksumだけで発行元を証明するものではありません。管理者が案内したリポジトリのReleaseから取得してください。
 
 Windowsがexeの発行元を未確認と表示した場合、取得元とchecksumを確認して管理者へ相談してください。保護機能や実行ポリシーを変更する必要はありません。
 
@@ -54,12 +100,7 @@ Windowsがexeの発行元を未確認と表示した場合、取得元とchecksu
 
 旧0.2.7 main `0fc6ceb301f1a4d5da95e377af9309e3ab89d584`は[成功run 38204606931](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/runs/38204606931)にありました。有効期限は2026-10-26 04:45 UTCです。新規導入は上記v0.2.8 Releaseを使い、この節は旧包装を受領済みの人向けです。
 
-この旧ZIPだけは中に`xpotato-tunnel-windows-amd64.tar.gz`があります。ZIPを空フォルダーへ展開した後、そこで次を実行します。その後は上のPowerShell例の**内部`SHA256SUMS`のforeach検証だけ**を使い、versionが`0.2.7`であることを確認します。0.2.8 Release用の外側ZIP checksumや保存先は使いません。旧包装には`build-info.json`はなく、runのcommitと`build-info.txt`で確認します。
-
-```powershell
-tar -xzf .\xpotato-tunnel-windows-amd64.tar.gz
-if ($LASTEXITCODE -ne 0) { throw 'tar extraction failed' }
-```
+この旧ZIPだけは中に`xpotato-tunnel-windows-amd64.tar.gz`があります。旧包装を調べる場合は管理者と`SHA256SUMS`、version `0.2.7`、runのcommitと`build-info.txt`を確認してください。上の0.2.8専用ブロックは旧包装には使えません。
 
 ## Linuxで展開・確認する
 
