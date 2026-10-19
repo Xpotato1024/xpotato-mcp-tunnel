@@ -51,7 +51,15 @@ jobs:
           else
             cmp dist/release/*.tar.gz dist/release-repeat/*.tar.gz
           fi
-      - name: Windows checksums through documented PowerShell procedure
+      - name: Windows quickstart regression checks
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./test/quickstart.test.ps1 -BinaryPath ./dist/xpotato-tunnel.exe
+      - name: Windows PowerShell 5.1 quickstart regression checks
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./test/quickstart.test.ps1 -BinaryPath ./dist/xpotato-tunnel.exe
+      - name: Windows package checksums
         if: runner.os == 'Windows'
         shell: pwsh
         run: |

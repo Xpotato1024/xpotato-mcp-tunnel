@@ -14,6 +14,8 @@ Windows/Linux amd64で、端末内のDesktop CommanderをOpenAIトンネルに�
 - Linux: [v0.2.9 tar.gz](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-linux-amd64.tar.gz)と[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-linux-amd64.tar.gz.sha256)。
 - privateリポジトリのためアクセス権とGitHubログインが必要です。[Actions](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/workflows/windows-tests.yml)の14日期限artifactはレビュー・検証用で、正式導入にはReleaseを選びます。
 
+WindowsはZIPと同名の`.zip.sha256`を両方保存し、[quickstartの検証ブロック](docs/quickstart.md)をまとめて実行してください。不足やchecksumエラーの後に、展開の行だけを続けて実行しません。既に展開済みのフォルダーは再展開せず検証できます。
+
 - 初めて使う: レビュー済み配布物を展開し、通常の対話端末で新exeの`setup`を実行。
 - 既に使っている: 新しい配布exeの`update`を実行。同じhome/deviceと保存済みキーを再利用。
 - 困ったとき: [確認・診断・再開](docs/operations.md)。設定を削除せず、保存版と稼働版を分けて確認。
