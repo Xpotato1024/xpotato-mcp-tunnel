@@ -1,6 +1,6 @@
 # Setup・Update・Start とツールの表示
 
-正式配布は[Release v0.2.8](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.8)です。同じコア版の別バイナリは上書きしません。CIの同版再ビルドを正式Releaseの代わりにupdateへ使わず、新しい配布には新しい版番号を使います。固定 Node 24.14.0／Tunnel 0.0.16／Commander 0.2.52、通信周期・認証・許可範囲は変更しません。
+正式配布は[Release v0.2.9](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.9)です。同じコア版の別バイナリは上書きしません。CIの同版再ビルドを正式Releaseの代わりにupdateへ使わず、新しい配布には新しい版番号を使います。固定 Node 24.14.0／Tunnel 0.0.16／Commander 0.2.52、通信周期・認証・許可範囲は変更しません。
 
 ## 待機の表示
 
@@ -22,7 +22,7 @@ Updateにもruntime取得・展開・検証等の工程表示を渡します。�
 
 Start/Updateの工程・接続表示と子runtimeのログは、それぞれ1行4KiB、書き込み中を含め64KiBの非ブロッキングqueueでstderrへ送ります。混雑中は表示を省略し、表示先のエラー後は無効化します。各queueの終了時flush待ちは最大200msです。子runtimeログの途中行も4KiBに制限し、長すぎる行は全体を省略します。可能な範囲で省略通知を出します。制御文字・方向制御文字をエスケープし、安全な色のSGRだけをTTYで保持します。Setup工程は入力と順序を保つため従来の同期表示を維持します。
 
-子runtimeのログpipeを保持した子孫がleader終了後も残る場合、コピー待ちは1秒で打ち切り、その後に既存の所有子プロセス回収へ進みます。この待機上限は通信中の要求期限を変更しません。修正候補0.2.9は`struct-text`を明示し、runtime自身のstdout（構造化ログ）とstderrを同じマスク・上限付き表示へ送ります。Commanderとruntime間のMCP stdin/stdoutはruntime内部の専用pipeで、変更しません。コアのstdoutへruntimeログは転送しません。
+子runtimeのログpipeを保持した子孫がleader終了後も残る場合、コピー待ちは1秒で打ち切り、その後に既存の所有子プロセス回収へ進みます。この待機上限は通信中の要求期限を変更しません。0.2.9は`struct-text`を明示し、runtime自身のstdout（構造化ログ）とstderrを同じマスク・上限付き表示へ送ります。Commanderとruntime間のMCP stdin/stdoutはruntime内部の専用pipeで、変更しません。コアのstdoutへruntimeログは転送しません。
 
 ## ツールの表示
 
