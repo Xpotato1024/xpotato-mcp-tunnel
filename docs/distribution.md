@@ -47,7 +47,7 @@ ActionsのWindows artifactは`content`を直接ZIP化するため二重包装に
 
 1. 対象versionと採用済みmainの完全commit SHAを選びます。同じSHAでWindows/Linux両方のGo・Node・runtime smoke・package検証CIが成功し、独立レビューが済んでいることを確認します。
 2. 両OSのcleanな同一SHAから上記候補を作り、`build-info.json`のversion/commit/platform/dirty、内部checksum、外側archiveの`.sha256`、展開後versionを確認します。利用者が受け取るZIP/tar.gzを実際に展開して確認します。
-3. 既存tag/Releaseがないことを確認し、GitHubのRelease作成UIで採用SHAを指す版付きtag（例`v0.2.7`）を選び、まず**Draft Release**として保存します。異なるcommitに既存tagがある場合は停止し、tag移動や上書きをしません。
+3. 既存tag/Releaseがないことを確認し、GitHubのRelease作成UIで採用SHAを指す版付きtag（この候補なら`v0.2.8`）を選び、まず**Draft Release**として保存します。異なるcommitに既存tagがある場合は停止し、tag移動や上書きをしません。
 4. 両OSのarchiveと各`.sha256`、対応SHA、版、runtimeは初回取得であること、更新手順、既知制約をDraftにそろえます。公開前に本人がassetと対象SHAを再確認します。
 5. **本人が配布公開を明示承認した後だけ**Publishを行います。privateリポジトリのReleaseはアクセス権を持つ人向けで、一般公開にはなりません。公開後にREADMEの現在の入手先を更新します。
 
