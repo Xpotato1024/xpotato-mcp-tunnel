@@ -595,7 +595,8 @@ func runtimeArguments(d core.Device, run, command string, diagnostics bool) []st
 	if diagnostics {
 		level = "info"
 	}
-	return []string{"run", "--profile-dir", filepath.Join(run, "profiles"), "--control-plane.base-url", controlPlaneURL, "--control-plane.url-path", "", "--control-plane.tunnel-id", d.Tunnel, "--control-plane.api-key", "env:CONTROL_PLANE_API_KEY", "--control-plane.max-inflight", "1", "--control-plane.poll-channel", "main", "--mcp.command", command, "--mcp.max-concurrent-requests", "1", "--mcp.stdio-send-initialized-notification", "--health.listen-addr", "127.0.0.1:0", "--health.url-file", filepath.Join(run, "health-url.txt"), "--log.level", level, "--log.format", "", "--log.file", "", "--log.http-raw-unsafe=false", "--pid.file", filepath.Join(run, "tunnel.pid")}
+	// Tunnel 0.0.16 rejects a non-default level such as warn with unset format.
+	return []string{"run", "--profile-dir", filepath.Join(run, "profiles"), "--control-plane.base-url", controlPlaneURL, "--control-plane.url-path", "", "--control-plane.tunnel-id", d.Tunnel, "--control-plane.api-key", "env:CONTROL_PLANE_API_KEY", "--control-plane.max-inflight", "1", "--control-plane.poll-channel", "main", "--mcp.command", command, "--mcp.max-concurrent-requests", "1", "--mcp.stdio-send-initialized-notification", "--health.listen-addr", "127.0.0.1:0", "--health.url-file", filepath.Join(run, "health-url.txt"), "--log.level", level, "--log.format", "struct-text", "--log.file", "", "--log.http-raw-unsafe=false", "--pid.file", filepath.Join(run, "tunnel.pid")}
 }
 func (manager Manager) Run(home string, d core.Device, key []byte) (int, error) {
 	dir := filepath.Join(home, "releases", d.Release)
@@ -630,14 +631,16 @@ func (manager Manager) Run(home string, d core.Device, key []byte) (int, error) 
 	}
 	args := runtimeArguments(d, run, command, manager.Diagnostics)
 	cmd := exec.Command(filepath.Join(dir, executable()), args...)
-	// After the leader exits, a descendant must not hold the stderr drain open
+	// After the leader exits, a descendant must not hold the log drain open
 	// forever and prevent the existing owned-tree cleanup path from running.
 	cmd.WaitDelay = time.Second
 	cmd.Dir = run
 	cmd.Env = runtimeEnvironment(os.Environ(), run, profile, filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"), key)
 	childLog := display.NewChild(os.Stderr, manager.ActivityColor, key)
 	defer childLog.Close()
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, childLog
+	// Structured tunnel-runtime logs use stdout; MCP stdio is a separate pipe
+	// owned by that runtime. Sanitize both runtime log streams on parent stderr.
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, childLog, childLog
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(interrupt)
