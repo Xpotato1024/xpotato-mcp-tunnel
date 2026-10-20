@@ -44,6 +44,6 @@ stderrは1行4KiB、各queueは書込み中を含め64KiBです。長い行や�
 
 `doctor`は保存先とinstall lock、`doctor --device 端末名`はその設定・runtime/lock整合性を読み取ります。runtime検証はreceiptと全ファイルのhash・固定版の照合で、起動引数を実行する設定検証ではありません。資格情報の値、実接続、アカウント登録も検査しません。成功だけで起動設定の受理・オンライン/MCP成功とは判定しません。
 
-恒久homeにはcore、releases、devices、command-install metadataとロック、キーはOS保管庫にあります。配布フォルダーと恒久homeは別です。通常のupdateは旧core/runtimeや設定を削除しません。rollbackは現コアが認識する保存済みruntimeに限ります。
+恒久homeにはcore、releases、devices、command-install metadataとロック、キーはOS保管庫にあります。配布フォルダーと恒久homeは別です。通常のupdateは旧core/runtimeや設定を削除しません。候補0.2.10のrollbackは保存済みcore/runtimeを組で戻し、現管理coreが全検証できる互換runtimeに限ります。[世代切替と再開の詳細](update-transactions.md)を参照してください。
 
 新規ユーザーも更新ユーザーも[導入の入口](quickstart.md)から進めます。公開インストーラ、自動常駐、アカウント自動登録はありません。

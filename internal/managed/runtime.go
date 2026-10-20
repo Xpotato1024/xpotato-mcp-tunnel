@@ -13,8 +13,6 @@ import (
 	"fmt"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/display"
-	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/lockfile"
-	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/platform"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/processctrl"
 	"io"
 	"net/http"
@@ -53,7 +51,15 @@ func manifest() (Manifest, error) {
 	return Manifest{}, errors.New("unsupported OS")
 }
 func releaseID(m Manifest) string {
-	return "core-" + core.Version + "-" + m.Platform + "-tunnel-" + tunnelVersion + "-dc-" + commanderVersion + "-node-" + nodeVersion
+	stdio, _ := assets.ReadFile("assets/stdio.mjs")
+	activity, _ := assets.ReadFile("assets/activity.mjs")
+	// Bump Recipe when extraction, npm flags, or patch semantics change.
+	b, _ := json.Marshal(struct {
+		Recipe                       int
+		Manifest                     Manifest
+		Lock, Stdio, Activity, Patch string
+	}{1, m, dependencyLockSHA, hashBytes(stdio), hashBytes(activity), marker + chromeCall.String()})
+	return "runtime-v1-" + hashBytes(b)
 }
 func executable() string {
 	if runtime.GOOS == "windows" {
@@ -73,6 +79,8 @@ func hashFile(file string) (string, error) {
 	return hashFileContext(ctx, file)
 }
 func hashFileContext(ctx context.Context, file string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, fileOperationTimeout)
+	defer cancel()
 	if e := ctx.Err(); e != nil {
 		return "", e
 	}
@@ -94,18 +102,30 @@ type Receipt struct {
 	Files    map[string]string
 }
 type Manager struct {
-	Progress        func(string)
-	ActivityDetails bool
-	ActivityColor   bool
-	Diagnostics     bool
+	Context          context.Context
+	runtimeManifest  func() (Manifest, error)
+	populate         func(context.Context, string, Manifest) error
+	inventoryStarted func()
+	Progress         func(string)
+	ActivityDetails  bool
+	ActivityColor    bool
+	Diagnostics      bool
 }
 
 func (m Manager) stage(label string, work func() error) error {
-	return runStage(m.Progress, label, progressInterval, work)
+	return runStage(m.Progress, label, progressInterval, func() error {
+		if e := m.context().Err(); e != nil {
+			return e
+		}
+		return work()
+	})
 }
 
 func download(url, file, expected string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	return downloadContext(context.Background(), url, file, expected)
+}
+func downloadContext(parent context.Context, url, file, expected string) error {
+	ctx, cancel := context.WithTimeout(parent, 3*time.Minute)
 	defer cancel()
 	req, e := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if e != nil {
@@ -113,6 +133,9 @@ func download(url, file, expected string) error {
 	}
 	resp, e := http.DefaultClient.Do(req)
 	if e != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return errors.New("official runtime download failed; retry setup")
 	}
 	defer resp.Body.Close()
@@ -132,6 +155,9 @@ func download(url, file, expected string) error {
 		return closeErr
 	}
 	h, e := hashFileContext(ctx, file)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if errors.Is(e, context.DeadlineExceeded) {
 		return errors.New("official archive download/hash exceeded its 3 minute deadline; existing runtime preserved")
 	}
@@ -175,6 +201,11 @@ func extractZIP(archive, root string) error {
 	return extractZIPContext(ctx, archive, root)
 }
 func extractZIPContext(ctx context.Context, archive, root string) error {
+	ctx, cancel := context.WithTimeout(ctx, fileOperationTimeout)
+	defer cancel()
+	if e := ctx.Err(); e != nil {
+		return e
+	}
 	z, e := zip.OpenReader(archive)
 	if e != nil {
 		return e
@@ -210,7 +241,10 @@ func extractZIPContext(ctx context.Context, archive, root string) error {
 	return nil
 }
 func extractNode(archive, root string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), fileOperationTimeout)
+	return extractNodeContext(context.Background(), archive, root)
+}
+func extractNodeContext(parent context.Context, archive, root string) error {
+	ctx, cancel := context.WithTimeout(parent, fileOperationTimeout)
 	defer cancel()
 	if runtime.GOOS == "windows" {
 		if e := extractZIPContext(ctx, archive, root); e != nil {
@@ -292,6 +326,13 @@ func filesReceiptContext(ctx context.Context, root string) (map[string]string, e
 	return files, e
 }
 func walkFileHashes(ctx context.Context, root string, visit func(string, string) error) error {
+	return walkFileHashesObserved(ctx, root, visit, nil)
+}
+
+type InventoryProgress struct{ Files, Bytes int64 }
+
+func walkFileHashesObserved(ctx context.Context, root string, visit func(string, string) error, observe func(InventoryProgress)) error {
+	var progress InventoryProgress
 	hash := sha256.New()
 	buffer := make([]byte, 32*1024)
 	return filepath.WalkDir(root, func(p string, d os.DirEntry, e error) error {
@@ -320,7 +361,7 @@ func walkFileHashes(ctx context.Context, root string, visit func(string, string)
 			return e
 		}
 		hash.Reset()
-		_, e = io.CopyBuffer(hash, contextReader{ctx, f}, buffer)
+		n, e := io.CopyBuffer(hash, contextReader{ctx, f}, buffer)
 		closeErr := f.Close()
 		if e != nil {
 			return e
@@ -331,101 +372,91 @@ func walkFileHashes(ctx context.Context, root string, visit func(string, string)
 		var sum [sha256.Size]byte
 		var encoded [sha256.Size * 2]byte
 		hex.Encode(encoded[:], hash.Sum(sum[:0]))
-		return visit(rel, string(encoded[:]))
+		if e = visit(rel, string(encoded[:])); e != nil {
+			return e
+		}
+		progress.Files++
+		progress.Bytes += n
+		if observe != nil {
+			observe(progress)
+		}
+		return nil
 	})
 }
 func (manager Manager) Install(home string) (string, error) {
-	m, e := manifest()
+	p, e := manager.PrepareRuntime(home, "")
 	if e != nil {
 		return "", e
 	}
-	id := releaseID(m)
-	dest := filepath.Join(home, "releases", id)
-	if _, e = os.Stat(dest); e == nil {
-		return id, manager.Verify(home, id)
-	}
-	releases := filepath.Dir(dest)
-	if e = os.MkdirAll(releases, 0700); e != nil {
-		return "", e
-	}
-	lock := filepath.Join(releases, "install.lock")
-	i, e := platform.CurrentIdentity()
-	if e != nil {
-		return "", errors.New("install lock owner unavailable")
-	}
-	unlock, e := lockfile.Acquire(lock, i.Owner)
-	if e != nil {
-		return "", e
-	}
-	defer unlock()
-	stage, e := os.MkdirTemp(releases, ".stage-")
-	if e != nil {
-		return "", e
-	}
-	defer os.RemoveAll(stage) // only this owned temporary child
+	defer p.Close()
+	return p.Verify()
+}
+
+func (manager Manager) populateRuntime(ctx context.Context, stage string, m Manifest) error {
+	var e error
 	archive := filepath.Join(stage, "tunnel.zip")
-	if e = manager.stage("Tunnel runtime をダウンロード（上限3分）", func() error { return download(m.TunnelURL, archive, m.TunnelSHA) }); e != nil {
-		return "", e
+	if e = manager.stage("Tunnel runtime をダウンロード（上限3分）", func() error { return downloadContext(ctx, m.TunnelURL, archive, m.TunnelSHA) }); e != nil {
+		return e
 	}
-	if e = manager.stage("Tunnel runtime を展開", func() error { return extractZIP(archive, stage) }); e != nil {
-		return "", e
+	if e = manager.stage("Tunnel runtime を展開", func() error { return extractZIPContext(ctx, archive, stage) }); e != nil {
+		return e
 	}
 	os.Remove(archive)
-	h, e := hashFile(filepath.Join(stage, executable()))
+	h, e := hashFileContext(ctx, filepath.Join(stage, executable()))
 	if e != nil || h != m.ExecutableSHA {
-		return "", errors.New("tunnel executable SHA256 mismatch")
+		return errors.New("tunnel executable SHA256 mismatch")
 	}
 	if runtime.GOOS == "linux" {
 		if e = os.Chmod(filepath.Join(stage, executable()), 0700); e != nil {
-			return "", e
+			return e
 		}
 	}
 	archive = filepath.Join(stage, "node.archive")
-	if e = manager.stage("Node をダウンロード（上限3分）", func() error { return download(m.NodeURL, archive, m.NodeSHA) }); e != nil {
-		return "", e
+	if e = manager.stage("Node をダウンロード（上限3分）", func() error { return downloadContext(ctx, m.NodeURL, archive, m.NodeSHA) }); e != nil {
+		return e
 	}
-	if e = manager.stage("Node を展開", func() error { return extractNode(archive, stage) }); e != nil {
-		return "", e
+	if e = manager.stage("Node を展開", func() error { return extractNodeContext(ctx, archive, stage) }); e != nil {
+		return e
 	}
 	os.Remove(archive)
 	if e = os.WriteFile(filepath.Join(stage, "package.json"), []byte(`{"private":true,"name":"xpotato-managed-runtime","version":"1.0.0","dependencies":{"@wonderwhy-er/desktop-commander":"0.2.52"}}`), 0600); e != nil {
-		return "", e
+		return e
 	}
 	dependencyLock, _ := assets.ReadFile("assets/package-lock.json")
 	if hashBytes(dependencyLock) != dependencyLockSHA {
-		return "", errors.New("bundled dependency lock changed")
+		return errors.New("bundled dependency lock changed")
 	}
 	if e = os.WriteFile(filepath.Join(stage, "package-lock.json"), dependencyLock, 0600); e != nil {
-		return "", e
+		return e
 	}
 	node, npm := nodeFiles(stage)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	npmCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, node, npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--bin-links=false")
+	cmd := exec.Command(node, npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--bin-links=false")
 	cmd.Dir = stage
 	// Own cache; no inherited authentication configuration or npm config files.
 	cache := filepath.Join(stage, ".npm-cache")
 	userConfig := filepath.Join(stage, "empty-npmrc")
 	globalConfig := filepath.Join(stage, "empty-global-npmrc")
 	if e = os.WriteFile(userConfig, nil, 0600); e != nil {
-		return "", e
+		return e
 	}
 	if e = os.WriteFile(globalConfig, nil, 0600); e != nil {
-		return "", e
+		return e
 	}
 	cmd.Env = cleanNPMEnv(os.Environ())
 	cmd.Env = append(cmd.Env, "NPM_CONFIG_USERCONFIG="+userConfig, "NPM_CONFIG_GLOBALCONFIG="+globalConfig, "NPM_CONFIG_CACHE="+cache, "NPM_CONFIG_REGISTRY=https://registry.npmjs.org/")
 	// npm output may contain inherited proxy/private metadata; do not forward it.
 	if e = manager.stage("Commander の固定依存をインストール（上限5分）", func() error {
-		if err := cmd.Run(); err != nil {
-			if ctx.Err() != nil {
-				return errors.New("5分の期限を超えました。既存 runtime は保持しています")
+		if err := runOwnedContext(npmCtx, cmd); err != nil {
+			if npmCtx.Err() != nil {
+				return npmCtx.Err()
 			}
 			return errors.New("pinned Commander install failed; existing runtime preserved")
 		}
 		return nil
 	}); e != nil {
-		return "", e
+		return e
 	}
 	os.RemoveAll(cache)
 	os.Remove(userConfig)
@@ -433,54 +464,53 @@ func (manager Manager) Install(home string) (string, error) {
 	entry := filepath.Join(stage, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js")
 	b, e := os.ReadFile(entry)
 	if e != nil {
-		return "", e
+		return e
 	}
 	b, e = patchCommander(b)
 	if e != nil {
-		return "", e
+		return e
 	}
 	if e = os.WriteFile(entry, b, 0600); e != nil {
-		return "", e
+		return e
 	}
 	stdio, _ := assets.ReadFile("assets/stdio.mjs")
 	if e = os.WriteFile(filepath.Join(stage, "stdio.mjs"), stdio, 0600); e != nil {
-		return "", e
+		return e
 	}
 	activity, _ := assets.ReadFile("assets/activity.mjs")
 	if e = os.WriteFile(filepath.Join(stage, "activity.mjs"), activity, 0600); e != nil {
-		return "", e
+		return e
 	}
 	var files map[string]string
-	if e = manager.stage("全 runtime ファイルの SHA-256 を記録", func() error {
-		var err error
-		files, err = filesReceipt(stage)
-		return err
-	}); e != nil {
-		return "", e
+	files = map[string]string{}
+	if e = manager.inventory(ctx, "全 runtime ファイルの SHA-256 を記録", stage, func(p, h string) error { files[p] = h; return nil }); e != nil {
+		return e
 	}
 	receipt, _ := json.Marshal(Receipt{m, files})
 	if e = os.WriteFile(filepath.Join(stage, "receipt.json"), receipt, 0600); e != nil {
-		return "", e
+		return e
 	}
-	if e = manager.stage("展開した全 runtime ファイルを検証", func() error { return verifyDirectory(stage, m) }); e != nil {
-		return "", e
-	}
-	if e = os.Rename(stage, dest); e != nil {
-		return "", e
-	}
-	return id, nil
+	return ctx.Err()
 }
 func (manager Manager) Verify(home, id string) error {
-	m, e := manifest()
+	m, e := manager.manifest()
 	if e != nil {
 		return e
 	}
-	if id != releaseID(m) {
+	if !compatibleRuntimeID(m, id) {
 		return core.ErrRuntimePinUnsupported
 	}
-	return manager.stage("保存済み全 runtime ファイルを検証", func() error { return verifyDirectory(filepath.Join(home, "releases", id), m) })
+	return manager.verifyDirectory(manager.context(), filepath.Join(home, "releases", id), m)
 }
 func verifyDirectory(dir string, m Manifest) error {
+	return (Manager{}).verifyDirectory(context.Background(), dir, m)
+}
+func (manager Manager) verifyDirectory(parent context.Context, dir string, m Manifest) error {
+	ctx, cancel := context.WithTimeout(parent, fileOperationTimeout)
+	defer cancel()
+	if e := ctx.Err(); e != nil {
+		return e
+	}
 	b, e := os.ReadFile(filepath.Join(dir, "receipt.json"))
 	if e != nil {
 		return errors.New("runtime receipt missing")
@@ -489,10 +519,8 @@ func verifyDirectory(dir string, m Manifest) error {
 	if json.Unmarshal(b, &r) != nil || r.Manifest != m {
 		return errors.New("runtime receipt manifest mismatch")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), fileOperationTimeout)
-	defer cancel()
 	count := 0
-	e = walkFileHashes(ctx, dir, func(p, h string) error {
+	e = manager.inventory(ctx, "保存済み全 runtime ファイルを検証", dir, func(p, h string) error {
 		count++
 		if r.Files[p] != h {
 			return errors.New("runtime integrity check failed")
@@ -503,6 +531,9 @@ func verifyDirectory(dir string, m Manifest) error {
 		return errors.New("runtime verification exceeded its 10 minute deadline; existing runtime preserved")
 	}
 	if e != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return errors.New("runtime integrity or file inventory check failed")
 	}
 	if count != len(r.Files) {
@@ -599,6 +630,9 @@ func runtimeArguments(d core.Device, run, command string, diagnostics bool) []st
 	return []string{"run", "--profile-dir", filepath.Join(run, "profiles"), "--control-plane.base-url", controlPlaneURL, "--control-plane.url-path", "", "--control-plane.tunnel-id", d.Tunnel, "--control-plane.api-key", "env:CONTROL_PLANE_API_KEY", "--control-plane.max-inflight", "1", "--control-plane.poll-channel", "main", "--mcp.command", command, "--mcp.max-concurrent-requests", "1", "--mcp.stdio-send-initialized-notification", "--health.listen-addr", "127.0.0.1:0", "--health.url-file", filepath.Join(run, "health-url.txt"), "--log.level", level, "--log.format", "struct-text", "--log.file", "", "--log.http-raw-unsafe=false", "--pid.file", filepath.Join(run, "tunnel.pid")}
 }
 func (manager Manager) Run(home string, d core.Device, key []byte) (int, error) {
+	if e := manager.context().Err(); e != nil {
+		return 1, e
+	}
 	dir := filepath.Join(home, "releases", d.Release)
 	node, _ := nodeFiles(dir)
 	command, e := Command(node, filepath.Join(dir, "stdio.mjs"))
@@ -644,6 +678,16 @@ func (manager Manager) Run(home string, d core.Device, key []byte) (int, error) 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(interrupt)
+	stopContext := context.AfterFunc(manager.context(), func() {
+		select {
+		case interrupt <- os.Interrupt:
+		default:
+		}
+	})
+	defer stopContext()
+	if e = manager.context().Err(); e != nil {
+		return 1, e
+	}
 	clear := func() {
 		cmd.Env = nil
 		for i := range key {

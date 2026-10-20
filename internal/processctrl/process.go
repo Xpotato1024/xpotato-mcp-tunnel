@@ -3,10 +3,34 @@
 package processctrl
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"time"
 )
+
+func RunContext(ctx context.Context, cmd *exec.Cmd, started func(), grace time.Duration) (int, error) {
+	if e := ctx.Err(); e != nil {
+		return 1, e
+	}
+	signals := make(chan os.Signal, 1)
+	done, joined := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(joined)
+		select {
+		case <-ctx.Done():
+			signals <- os.Interrupt
+		case <-done:
+		}
+	}()
+	code, e := Run(cmd, signals, started, grace)
+	close(done)
+	<-joined
+	if ctx.Err() != nil {
+		return code, ctx.Err()
+	}
+	return code, e
+}
 
 func Run(cmd *exec.Cmd, signals <-chan os.Signal, started func(), grace time.Duration) (int, error) {
 	return RunWithStatus(cmd, signals, started, grace, nil)

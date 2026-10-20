@@ -29,9 +29,10 @@ ReleaseのWindows ZIPは一度展開するとexeとガイドが直接出てき�
 
 ```powershell
 & {
-    param([string] $ArchivePath, [string] $DestinationPath, [switch] $VerifyExisting)
+    param([string] $ArchivePath, [string] $DestinationPath, [switch] $VerifyExisting,
+          [ValidatePattern('^\d+\.\d+\.\d+$')][string] $ExpectedVersion = '0.2.9')
     $ErrorActionPreference = 'Stop'
-    $archiveName = 'xpotato-tunnel-0.2.9-windows-amd64.zip'
+    $archiveName = "xpotato-tunnel-$ExpectedVersion-windows-amd64.zip"
     if ([IO.Path]::GetFileName($ArchivePath) -ne $archiveName) {
         throw "Download name must be $archiveName (no (1) suffix)"
     }
@@ -85,7 +86,7 @@ ReleaseのWindows ZIPは一度展開するとexeとガイドが直接出てき�
     }
     if (-not $binaryChecked) { throw 'Binary checksum missing' }
     $version = & (Join-Path $DestinationPath 'xpotato-tunnel.exe') version
-    if ($LASTEXITCODE -ne 0 -or $version -ne '0.2.9') { throw 'version mismatch' }
+    if ($LASTEXITCODE -ne 0 -or $version -ne $ExpectedVersion) { throw 'version mismatch' }
     Get-Content -LiteralPath (Join-Path $DestinationPath 'build-info.json')
     Set-Location -LiteralPath $DestinationPath
     Write-Host "検証完了: $DestinationPath (version $version)"
@@ -93,6 +94,8 @@ ReleaseのWindows ZIPは一度展開するとexeとガイドが直接出てき�
 ```
 
 既に展開済みなら再展開は不要です。ZIPと`.zip.sha256`を揃え、同じブロックの最後の引数行に`-VerifyExisting`を追加すると、外側archive、検証済みZIP内の一覧と既存`SHA256SUMS`の一致、内部ファイル・versionだけを確認します。既存のファイルは上書き・削除しません。新規展開を選ぶ場合は別の未使用の`-DestinationPath`を指定してください。
+
+開発候補0.2.10は未公開です。候補artifactの隔離レビューでは、レビュー対象の版を`-ExpectedVersion`へ明示し、対応するarchiveと未使用の展開先を渡します。既定値と上の入手先は公開済み0.2.9のままです。候補を本人環境へ適用する手順や承認は含みません。[候補の更新設計・制約](update-transactions.md)を参照してください。
 
 途中でエラーになったらsetup/updateへ進まず、不足ファイル・名前・checksumの原因を解決して**ブロック全体**を再実行します。展開後の検証で停止したフォルダーも自動削除しません。表示された`build-info.json`の`version`、`commit`、`platform`がRelease本文と一致し、`dirty`が`false`であることも確認します。checksumは破損の検出であり、同梱checksumだけで発行元を証明するものではありません。管理者が案内したリポジトリのReleaseから取得してください。
 

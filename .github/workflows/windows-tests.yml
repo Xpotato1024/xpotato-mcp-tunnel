@@ -33,6 +33,11 @@ jobs:
         env:
           XPOTATO_RUNTIME_SMOKE: '1'
       - run: go vet ./...
+      - name: Race checks for update and launch fixtures
+        if: runner.os == 'Linux'
+        run: go test -race -count=1 ./internal/atomicfile ./internal/core ./internal/managed ./internal/processctrl ./cmd/xpotato-tunnel
+        env:
+          XPOTATO_RUNTIME_SMOKE: '0'
       - name: Package regression tests
         run: python -m unittest discover -s test -p "test_package.py" -v
       - name: Build review package (no publishing)

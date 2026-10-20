@@ -1,10 +1,12 @@
 package core
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/atomicfile"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/lockfile"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/platform"
 	"os"
@@ -14,7 +16,7 @@ import (
 	"strings"
 )
 
-const Version = "0.2.9"
+const Version = "0.2.10"
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 var tunnelPattern = regexp.MustCompile(`^tunnel_[a-zA-Z0-9_-]+$`)
@@ -23,6 +25,8 @@ var ErrRuntimePinUnsupported = errors.New("このコアで未対応の runtime �
 var ErrCommandDirectoryConflict = errors.New("既存の短縮コマンド保存先を変更できません")
 
 type Device struct {
+	Core               *CorePin `json:"core,omitempty"`
+	PreviousCore       *CorePin `json:"previousCore,omitempty"`
 	ProfileRevision    string   `json:"profileRevision,omitempty"`
 	CredentialRevision string   `json:"credentialRevision,omitempty"`
 	Schema             int      `json:"schemaVersion"`
@@ -64,6 +68,12 @@ type Runtime interface {
 	Run(string, Device, []byte) (int, error)
 }
 type App struct {
+	Context        context.Context
+	PrepareUpdate  func(context.Context, string) (CommandUpdate, error)
+	InstalledCore  func(string) (CorePin, error)
+	RunningCore    func(context.Context) (CorePin, error)
+	VerifyCore     func(context.Context, string, CorePin) error
+	writeDevice    func(string, Device) error
 	Progress       func(string)
 	Identity       func() (platform.Identity, error)
 	Vault          platform.Vault
@@ -122,36 +132,17 @@ func readJSON(file string, v any) error {
 	return json.Unmarshal(b, v)
 }
 func atomicJSON(file string, v any) error {
+	return atomicJSONContext(context.Background(), file, v)
+}
+func atomicJSONContext(ctx context.Context, file string, v any) error {
 	b, e := json.MarshalIndent(v, "", "  ")
 	if e != nil {
 		return e
 	}
-	return atomicFile(file, append(b, '\n'), 0600)
+	return atomicfile.Write(ctx, file, append(b, '\n'), 0600)
 }
 func atomicFile(file string, b []byte, mode os.FileMode) error {
-	if e := os.MkdirAll(filepath.Dir(file), 0700); e != nil {
-		return e
-	}
-	f, e := os.CreateTemp(filepath.Dir(file), ".write-")
-	if e != nil {
-		return e
-	}
-	tmp := f.Name()
-	defer os.Remove(tmp)
-	if e = f.Chmod(mode); e == nil {
-		_, e = f.Write(b)
-	}
-	if e == nil {
-		e = f.Sync()
-	}
-	closeErr := f.Close()
-	if e == nil {
-		e = closeErr
-	}
-	if e != nil {
-		return e
-	}
-	return os.Rename(tmp, file)
+	return atomicfile.Write(context.Background(), file, b, mode)
 }
 func exists(file string) bool                    { _, e := os.Stat(file); return e == nil }
 func acquire(file, owner string) (func(), error) { return lockfile.Acquire(file, owner) }
@@ -170,6 +161,9 @@ func (a App) owned(o Options) (Device, error) {
 	}
 	if d.Schema != 3 || d.Name != o.Device || d.Owner != i.Owner || !tunnelPattern.MatchString(d.Tunnel) || len(d.Approved) == 0 || !validRevisions(d) || d.Credential != credentialReference(o.Home, d) {
 		return d, errors.New("device owner/schema/credential reference invalid; existing state was preserved")
+	}
+	if (d.Core != nil && !d.Core.Valid()) || (d.PreviousCore != nil && !d.PreviousCore.Valid()) {
+		return d, errors.New("core generation metadata invalid; existing state preserved")
 	}
 	for _, p := range d.Approved {
 		if !qualified(p) {
@@ -368,7 +362,25 @@ func (a App) Setup(o Options) (Options, error) {
 	}
 	if pendingRelease != "" {
 		d.Previous, d.Release = d.Release, pendingRelease
-		if e = atomicJSON(deviceFile(o), d); e != nil {
+		d.PreviousCore = d.Core
+	}
+	if a.InstalledCore != nil {
+		pin, err := a.InstalledCore(o.Home)
+		if err != nil {
+			return o, err
+		}
+		if d.Core == nil {
+			d.Core = &pin
+		} else if *d.Core != pin {
+			if pendingRelease == "" {
+				d.Previous = d.Release
+				d.PreviousCore = d.Core
+			}
+			d.Core = &pin
+		}
+	}
+	if pendingRelease != "" || a.InstalledCore != nil {
+		if e = a.saveDevice(o, d); e != nil {
 			return o, e
 		}
 	}
@@ -490,11 +502,29 @@ func (a App) Start(o Options) (code int, err error) {
 	if e != nil {
 		return 1, e
 	}
+	if d.Core != nil && d.Core.Version != Version {
+		return 1, errors.New("selected core generation changed; retry the installed short command")
+	}
+	if d.Core != nil && a.RunningCore != nil {
+		pin, err := a.RunningCore(a.context())
+		if err != nil {
+			return 1, err
+		}
+		if pin != *d.Core {
+			return 1, errors.New("running core SHA256 differs from selected generation; retry the installed short command")
+		}
+	}
+	if e = a.context().Err(); e != nil {
+		return 1, e
+	}
 	if !d.ConfigReady || !d.CredentialReady {
 		return 1, errors.New("setup incomplete; run setup")
 	}
 	report("固定 runtime の整合性を確認")
 	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
+		return 1, e
+	}
+	if e = a.context().Err(); e != nil {
 		return 1, e
 	}
 	report("Tunnel の二重起動を確認")
@@ -504,10 +534,16 @@ func (a App) Start(o Options) (code int, err error) {
 	}
 	defer tunlock()
 	report("本人の資格情報ストアの利用可否を確認")
+	if e = a.context().Err(); e != nil {
+		return 1, e
+	}
 	if e = a.Vault.Ready(); e != nil {
 		return 1, e
 	}
 	report("この端末の保存済み資格情報を取得（値は表示しません）")
+	if e = a.context().Err(); e != nil {
+		return 1, e
+	}
 	key, e := a.Vault.Load(d.Credential)
 	defer wipe(key)
 	if e != nil {
@@ -515,6 +551,9 @@ func (a App) Start(o Options) (code int, err error) {
 	}
 	if !validKey(key) {
 		return 1, errors.New("saved runtime key invalid; run credentials")
+	}
+	if e = a.context().Err(); e != nil {
+		return 1, e
 	}
 	report("Tunnel 子プロセスを準備")
 	return a.Runtime.Run(o.Home, d, key)
@@ -532,6 +571,9 @@ func (a App) Update(o Options, rollback bool) error {
 	d, e = a.owned(o)
 	if e != nil {
 		return e
+	}
+	if a.PrepareUpdate != nil {
+		return a.updateGeneration(o, d, rollback)
 	}
 	var next string
 	if rollback {

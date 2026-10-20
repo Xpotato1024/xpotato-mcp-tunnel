@@ -1,6 +1,7 @@
 package managed
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
@@ -13,9 +14,11 @@ import (
 )
 
 type commandRecord struct {
-	Owner, Version, Directory string
-	Decided                   bool
-	Files                     map[string]string
+	Launcher, Fallback, Installer *core.CorePin     `json:",omitempty"`
+	PreviousFiles                 map[string]string `json:",omitempty"`
+	Owner, Version, Directory     string
+	Decided                       bool
+	Files                         map[string]string
 }
 
 func readCommandRecord(home string) (commandRecord, error) {
@@ -55,6 +58,9 @@ func validateCommandPath(p string) error {
 func PreviewCommand(home, requested string) (core.CommandPlan, error) {
 	r, e := readCommandRecord(home)
 	if e != nil {
+		return core.CommandPlan{}, e
+	}
+	if e = setupCommandCompatible(r); e != nil {
 		return core.CommandPlan{}, e
 	}
 	if requested != "" && r.Directory != "" && requested != r.Directory {
@@ -97,6 +103,9 @@ func SetupCommand(home, requested string, prompt core.Prompt) error {
 	if e != nil {
 		return e
 	}
+	if e = setupCommandCompatible(r); e != nil {
+		return e
+	}
 	if requested != "" && r.Directory != "" && requested != r.Directory {
 		return core.ErrCommandDirectoryConflict
 	}
@@ -134,6 +143,21 @@ func InstallCommand(home string) error {
 	return installCommand(home, r)
 }
 func installCommand(home string, r commandRecord) error {
+	if e := setupCommandCompatible(r); e != nil {
+		return e
+	}
+	if r.Launcher != nil {
+		source, e := os.Executable()
+		if e != nil {
+			return e
+		}
+		p, e := prepareCommandUpdateSelection(context.Background(), home, source, &r)
+		if e != nil {
+			return e
+		}
+		defer p.Close()
+		return p.Migrate()
+	}
 	if e := validateCommandPath(home); e != nil {
 		return e
 	}
@@ -222,6 +246,13 @@ func installCommand(home string, r commandRecord) error {
 	}
 	if e = saveCommandRecord(filepath.Join(home, "command-install.json"), next); e != nil {
 		return e
+	}
+	return nil
+}
+
+func setupCommandCompatible(r commandRecord) error {
+	if r.Version != "" && r.Version != core.Version && r.Launcher == nil {
+		return errors.New("先に新exeの update を同じ home/device で完了してください。旧短縮コマンドは保持しました")
 	}
 	return nil
 }

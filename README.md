@@ -1,5 +1,7 @@
 # xpotato-mcp-tunnel
 
+このブランチの開発候補は **0.2.10（未公開）** です。[更新処理の世代切替・取消・検証](docs/update-transactions.md)を改善しています。以下の正式配布案内は公開済み0.2.9を指し、候補のマージ・Release発行・本人環境への適用は別の判断です。
+
 Windows/Linux amd64で、端末内のDesktop CommanderをOpenAIトンネルにつなぐGoコアです。Laptopで使うものは **Windows amd64用の配布物に入っている `xpotato-tunnel.exe`** です。Go/Node/npmやソースコードの事前導入は不要です。通常ユーザーが一度Setupし、次回から保存済みキーで起動できます。
 
 正式配布は **[v0.2.9](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.9)** です。同版の異なるバイナリを上書きしないため、既存0.2.7／0.2.8から更新する場合もこのReleaseのexeを使います。`setup`/`update`は固定版のNode・Commander・Tunnelをネットワークから取得します。配布物は完全オフライン用runtime同梱版ではありません。旧Node CLIは撤去済みです。

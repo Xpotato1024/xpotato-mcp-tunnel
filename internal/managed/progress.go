@@ -13,6 +13,15 @@ const fileOperationTimeout = 10 * time.Minute
 // Reports only our fixed stage labels, never child output, URLs or environment.
 // Join the heartbeat before returning so it cannot cross an input prompt.
 func runStage(report func(string), label string, interval time.Duration, work func() error) error {
+	return runStageDetail(report, label, interval, nil, work)
+}
+func runStageDetail(report func(string), label string, interval time.Duration, detail func() string, work func() error) error {
+	status := func() string {
+		if detail != nil {
+			return " [" + detail() + "]"
+		}
+		return ""
+	}
 	if report == nil {
 		if err := work(); err != nil {
 			return fmt.Errorf("%s: %w", label, err)
@@ -31,7 +40,7 @@ func runStage(report func(string), label string, interval time.Duration, work fu
 			case <-stop:
 				return
 			case <-ticker.C:
-				report(fmt.Sprintf("%s — 処理中（経過 %s）", label, time.Since(started).Truncate(time.Second)))
+				report(fmt.Sprintf("%s — 処理中（経過 %s）%s", label, time.Since(started).Truncate(time.Second), status()))
 			}
 		}
 	}()
@@ -42,7 +51,7 @@ func runStage(report func(string), label string, interval time.Duration, work fu
 	if err != nil {
 		state = "失敗"
 	}
-	report(fmt.Sprintf("%s — %s（経過 %s）", label, state, time.Since(started).Truncate(time.Second)))
+	report(fmt.Sprintf("%s — %s（経過 %s）%s", label, state, time.Since(started).Truncate(time.Second), status()))
 	if err != nil {
 		return fmt.Errorf("%s: %w", label, err)
 	}

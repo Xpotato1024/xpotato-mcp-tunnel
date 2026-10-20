@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -13,8 +14,10 @@ import (
 	"golang.org/x/term"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
@@ -170,6 +173,11 @@ func parse(args []string) (string, core.Options, error) {
 	return command, o, nil
 }
 func run(args []string) (int, error) {
+	if len(args) > 0 && args[0] == "_dispatch" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return dispatch(ctx, args[1:])
+	}
 	command, o, e := parse(args)
 	if e != nil {
 		return 1, e
@@ -182,14 +190,16 @@ func run(args []string) (int, error) {
 		fmt.Println(core.Version)
 		return 0, nil
 	}
-	runtimeManager := managed.Manager{ActivityDetails: o.ActivityDetails, Diagnostics: o.Diagnostics}
+	ctx, stop := operationContext(command)
+	defer stop()
+	runtimeManager := managed.Manager{Context: ctx, ActivityDetails: o.ActivityDetails, Diagnostics: o.Diagnostics}
 	var report func(string)
 	if command == "setup" {
 		style := display.Detect(os.Stderr)
 		// Keep Setup progress ordered before the next interactive input prompt.
 		runtimeManager.Progress = func(message string) { fmt.Fprint(os.Stderr, style.Format(message)) }
 	}
-	if command == "start" || command == "update" {
+	if command == "start" || command == "update" || command == "rollback" {
 		style := display.Detect(os.Stderr)
 		reporter := display.New(os.Stderr, style)
 		defer reporter.Close()
@@ -200,7 +210,7 @@ func run(args []string) (int, error) {
 			report("内部診断ログ有効（INFO、HTTP raw無効、認証値をマスク）")
 		}
 	}
-	a := core.App{Progress: report, Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: runtimeManager, InstallCommand: managed.InstallCommand}
+	a := core.App{Context: ctx, PrepareUpdate: runtimeManager.PrepareCommand, InstalledCore: managed.InstalledCore, RunningCore: managed.RunningCore, VerifyCore: managed.VerifyCore, Progress: report, Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: runtimeManager, InstallCommand: managed.InstallCommand}
 	if command == "setup" {
 		a.PreviewCommand = managed.PreviewCommand
 		userHome, err := os.UserHomeDir()

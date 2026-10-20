@@ -17,7 +17,7 @@ func TestOlderRuntimePinRequiresReviewedRefresh(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	old := strings.Replace(releaseID(m), "core-"+core.Version+"-", "core-0.2.2-", 1)
+	old := "core-0.2.2-" + m.Platform + "-tunnel-" + tunnelVersion + "-dc-" + commanderVersion + "-node-" + nodeVersion
 	if e = (Manager{}).Verify(t.TempDir(), old); !errors.Is(e, core.ErrRuntimePinUnsupported) {
 		t.Fatal("older pin was implicitly adopted", e)
 	}
