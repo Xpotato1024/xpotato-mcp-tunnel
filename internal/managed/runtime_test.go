@@ -48,6 +48,22 @@ func TestNativeArgumentPreservesQuotedSpaces(t *testing.T) {
 		t.Fatalf("native command argument changed: %v", e)
 	}
 }
+
+func TestSourceOfferComesFromCoreNotAmbientEnvironment(t *testing.T) {
+	env := runtimeEnvironment([]string{"XPOTATO_MCP_SOURCE_INFO=malicious-private-source"}, "fixture-run", "fixture-profile", "fixture-entry", nil)
+	count := 0
+	for _, item := range env {
+		if strings.HasPrefix(item, "XPOTATO_MCP_SOURCE_INFO=") {
+			count++
+			if strings.Contains(item, "malicious") || !strings.Contains(item, `"license":"AGPL-3.0-only"`) || !strings.Contains(item, "Xpotato.net / Xpotato1024") {
+				t.Fatal("untrusted source offer")
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatal("source offer missing or duplicated")
+	}
+}
 func TestUntrustedAmbientTunnelConfigurationCannotRouteSavedKey(t *testing.T) {
 	base := []string{"PATH=fixture-path", "CONTROL_PLANE_BASE_URL=https://attacker.invalid", "CONTROL_PLANE_URL_PATH=attacker", "CONTROL_PLANE_EXTRA_HEADERS=malicious", "TUNNEL_CLIENT_CONFIG=private-config", "TUNNEL_CLIENT_PROFILE=private-profile", "TUNNEL_CLIENT_PROFILE_FILE=private-file", "MCP_COMMAND=other-command", "MCP_SERVER_URL=https://attacker.invalid", "HTTP_PROXY=http://attacker.invalid", "HTTPS_PROXY=http://attacker.invalid", "SSL_CERT_FILE=unapproved", "LOG_HTTP_RAW_UNSAFE=true", "HOME=private-home", "NODE_OPTIONS=--require=malicious"}
 	run := filepath.Join(t.TempDir(), "run")

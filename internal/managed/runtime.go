@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/display"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/licensing"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/processctrl"
 	"io"
 	"net/http"
@@ -27,7 +28,7 @@ import (
 	"time"
 )
 
-//go:embed assets/stdio.mjs assets/activity.mjs assets/package-lock.json
+//go:embed assets/stdio.mjs assets/activity.mjs assets/licensing.mjs assets/package-lock.json
 var assets embed.FS
 
 const nodeVersion = "24.14.0"
@@ -53,12 +54,13 @@ func manifest() (Manifest, error) {
 func releaseID(m Manifest) string {
 	stdio, _ := assets.ReadFile("assets/stdio.mjs")
 	activity, _ := assets.ReadFile("assets/activity.mjs")
+	license, _ := assets.ReadFile("assets/licensing.mjs")
 	// Bump Recipe when extraction, npm flags, or patch semantics change.
 	b, _ := json.Marshal(struct {
-		Recipe                       int
-		Manifest                     Manifest
-		Lock, Stdio, Activity, Patch string
-	}{1, m, dependencyLockSHA, hashBytes(stdio), hashBytes(activity), marker + chromeCall.String()})
+		Recipe                                int
+		Manifest                              Manifest
+		Lock, Stdio, Activity, License, Patch string
+	}{1, m, dependencyLockSHA, hashBytes(stdio), hashBytes(activity), hashBytes(license), marker + chromeCall.String()})
 	return "runtime-v1-" + hashBytes(b)
 }
 func executable() string {
@@ -481,6 +483,10 @@ func (manager Manager) populateRuntime(ctx context.Context, stage string, m Mani
 	if e = os.WriteFile(filepath.Join(stage, "activity.mjs"), activity, 0600); e != nil {
 		return e
 	}
+	license, _ := assets.ReadFile("assets/licensing.mjs")
+	if e = os.WriteFile(filepath.Join(stage, "licensing.mjs"), license, 0600); e != nil {
+		return e
+	}
 	var files map[string]string
 	files = map[string]string{}
 	if e = manager.inventory(ctx, "全 runtime ファイルの SHA-256 を記録", stage, func(p, h string) error { files[p] = h; return nil }); e != nil {
@@ -553,6 +559,10 @@ func (manager Manager) verifyDirectory(parent context.Context, dir string, m Man
 	if r.Files["activity.mjs"] != hashBytes(activity) {
 		return errors.New("tool activity observer changed")
 	}
+	license, _ := assets.ReadFile("assets/licensing.mjs")
+	if r.Files["licensing.mjs"] != hashBytes(license) {
+		return errors.New("source offer adapter changed")
+	}
 	b, e = os.ReadFile(filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"))
 	if e != nil || strings.Count(string(b), marker) != 1 || chromeCall.Match(b) {
 		return errors.New("Commander Chrome startup suppression missing")
@@ -610,6 +620,9 @@ const controlPlaneURL = "https://api.openai.com"
 func runtimeEnvironment(base []string, run, profile, entry string, key []byte) []string {
 	allowed := map[string]bool{"PATH": true, "SYSTEMROOT": true, "WINDIR": true, "COMSPEC": true, "PATHEXT": true, "OS": true, "PROCESSOR_ARCHITECTURE": true, "LANG": true, "LC_ALL": true, "LC_CTYPE": true, "TZ": true}
 	env := []string{}
+	// Nonsecret build provenance comes from this core, never inherited user input
+	// or a reusable runtime generation built by an older core.
+	env = append(env, "XPOTATO_MCP_SOURCE_INFO="+licensing.JSON(core.Version))
 	for _, line := range base {
 		name, _, _ := strings.Cut(line, "=")
 		if allowed[strings.ToUpper(name)] {

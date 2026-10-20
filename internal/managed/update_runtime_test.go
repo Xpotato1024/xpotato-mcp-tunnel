@@ -63,7 +63,7 @@ func BenchmarkUpdateInventoryPasses(b *testing.B) {
 }
 
 func TestPinnedFilesCannotBeChangedAlongWithReceipt(t *testing.T) {
-	for _, path := range []string{executable(), "package-lock.json", "stdio.mjs", "activity.mjs", "node_modules/@wonderwhy-er/desktop-commander/dist/index.js"} {
+	for _, path := range []string{executable(), "package-lock.json", "stdio.mjs", "activity.mjs", "licensing.mjs", "node_modules/@wonderwhy-er/desktop-commander/dist/index.js"} {
 		t.Run(path, func(t *testing.T) {
 			m := fixtureManifest(t)
 			root := t.TempDir()
@@ -84,7 +84,7 @@ func TestPinnedFilesCannotBeChangedAlongWithReceipt(t *testing.T) {
 
 func syntheticRuntime(t testing.TB, dir string, m Manifest) {
 	t.Helper()
-	files := map[string][]byte{executable(): []byte("synthetic runtime"), "package-lock.json": mustAsset(t, "package-lock.json"), "stdio.mjs": mustAsset(t, "stdio.mjs"), "activity.mjs": mustAsset(t, "activity.mjs"), "node_modules/@wonderwhy-er/desktop-commander/dist/index.js": []byte(marker + "\n"), "node/synthetic-node": []byte("fixture node")}
+	files := map[string][]byte{executable(): []byte("synthetic runtime"), "package-lock.json": mustAsset(t, "package-lock.json"), "stdio.mjs": mustAsset(t, "stdio.mjs"), "activity.mjs": mustAsset(t, "activity.mjs"), "licensing.mjs": mustAsset(t, "licensing.mjs"), "node_modules/@wonderwhy-er/desktop-commander/dist/index.js": []byte(marker + "\n"), "node/synthetic-node": []byte("fixture node")}
 	for p, b := range files {
 		dest := filepath.Join(dir, filepath.FromSlash(p))
 		if e := os.MkdirAll(filepath.Dir(dest), 0700); e != nil {

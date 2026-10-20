@@ -1,5 +1,9 @@
 # xpotato-mcp-tunnel
 
+**Xpotato.net / Xpotato1024** — プロジェクト固有コードは **AGPL-3.0-only**。
+[正式全文](LICENSE)・[帰属方針](COPYRIGHT)・[対応ソースと第三者依存の条件](docs/licensing.md)。
+`xpotato-tunnel about` / `license` / `source` で利用中の版からも確認できます。
+
 0.2.10では[更新処理の世代切替・取消・検証](docs/update-transactions.md)を改善し、Windowsの取得とdigest検証を一回の操作へまとめています。
 
 Windows/Linux amd64で、端末内のDesktop CommanderをOpenAIトンネルにつなぐGoコアです。Laptopで使うものは **Windows amd64用の配布物に入っている `xpotato-tunnel.exe`** です。Go/Node/npmやソースコードの事前導入は不要です。通常ユーザーが一度Setupし、次回から保存済みキーで起動できます。

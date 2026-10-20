@@ -92,3 +92,10 @@ Pinned runtime ready; applies at next start. Existing process was not restarted.
 停止は本人が元の起動端末でCtrl+Cし、終了を待ちます。同じTunnel IDのstdio接続は端末をまたいでも同時に1台だけ。device名を変えるだけでは分離できません。2台同時利用には別Tunnel IDと対応登録を使います。スリープ中は応答できず、復帰・回線切替後の回復は通常の再試行に依存します。
 
 [困ったとき](operations.md)、[Setupの仕様](setup-once-core.md)、[.env Setup](setup-env.md)も参照してください。
+
+## クレジット・ライセンス・対応ソース
+
+Xpotato.net / Xpotato1024 のプロジェクトです。`xpotato-tunnel about`、`license`、`source`
+で帰属表示・AGPL-3.0-only 全文・利用中の core の対応ソース情報を確認できます。
+第三者依存は元の条件を保持します。同じ Release の source.tar.gz が対応ソースです。
+改変・再配布・ネットワーク提供時の案内は [licensing.md](licensing.md) を参照してください。

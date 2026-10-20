@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/display"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/licensing"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/managed"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/platform"
 	"golang.org/x/term"
@@ -23,6 +24,7 @@ import (
 const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
   setup [--env-file PATH] [--device NAME] [--tunnel-id ID] [--allow ABSOLUTE_DIR ...]
   start | doctor | update | rollback | credentials | plugin
+  version | about | license | source (no setup or credentials required)
   --home ABSOLUTE_DIR  (all commands)
   --device NAME       (omit to use setup's default device)
   --activity-details  (start only; conservative argument display on stderr)
@@ -105,7 +107,7 @@ func parse(args []string) (string, core.Options, error) {
 	if command == "help" || (len(args) > 0 && (args[0] == "--help" || args[0] == "-h")) {
 		return "help", core.Options{}, nil
 	}
-	if command == "version" {
+	if command == "version" || command == "about" || command == "license" || command == "source" {
 		return command, core.Options{}, nil
 	}
 	if !strings.Contains("|setup|start|doctor|update|rollback|credentials|plugin|", "|"+command+"|") {
@@ -188,6 +190,18 @@ func run(args []string) (int, error) {
 	}
 	if command == "version" {
 		fmt.Println(core.Version)
+		return 0, nil
+	}
+	if command == "about" || command == "license" {
+		fmt.Print(licensing.Attribution)
+		fmt.Println("\nCorresponding source: xpotato-tunnel source")
+		if command == "license" {
+			fmt.Print("\n" + licensing.Text)
+		}
+		return 0, nil
+	}
+	if command == "source" {
+		fmt.Println(licensing.JSON(core.Version))
 		return 0, nil
 	}
 	ctx, stop := operationContext(command)

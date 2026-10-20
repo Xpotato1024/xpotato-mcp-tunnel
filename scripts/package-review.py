@@ -16,7 +16,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ("quickstart.md", "setup-once-core.md", "operations.md", "setup-env.md",
-        "runtime-ux.md", "performance-review.md", "distribution.md", "update-transactions.md")
+        "runtime-ux.md", "performance-review.md", "distribution.md", "update-transactions.md", "licensing.md", "buffers-license-evidence.json")
 
 
 def sha256(path):
@@ -59,8 +59,19 @@ def assemble(binary, output, version, commit, platform, dirty, build_info,
         (content / name).chmod(0o755)
     for doc in DOCS:
         shutil.copy2(ROOT / "docs" / doc, content / doc)
+    # Binary packages flatten docs; keep the legal/source links inside them.
+    guide = content / "licensing.md"
+    guide.write_text(guide.read_text(encoding="utf-8").replace("../LICENSE", "LICENSE")
+                     .replace("../COPYRIGHT", "COPYRIGHT")
+                     .replace("../THIRD-PARTY-NOTICES.txt", "THIRD-PARTY-NOTICES.txt"),
+                     encoding="utf-8", newline="\n")
     shutil.copy2(ROOT / "docs/quickstart.md", content / "README.md")
     shutil.copy2(ROOT / "THIRD-PARTY-NOTICES.txt", content / "THIRD-PARTY-NOTICES.txt")
+    for notice in ("LICENSE", "COPYRIGHT", "CHANGES.md"):
+        shutil.copy2(ROOT / notice, content / notice)
+    changes = content / "CHANGES.md"
+    changes.write_text(changes.read_text(encoding="utf-8").replace("(docs/licensing.md)", "(licensing.md)"),
+                       encoding="utf-8", newline="\n")
     if platform.startswith("windows"):
         shutil.copy2(ROOT / "scripts/verify-windows.ps1", content / "verify-windows.ps1")
     shutil.copytree(ROOT / "docs/performance-results", content / "performance-results")

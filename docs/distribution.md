@@ -72,3 +72,26 @@ python scripts/release-guide.py --version 0.2.10 --commit SOURCE_COMMIT --archiv
 出力は新規ファイル限定です。失敗や取消後は原因を確認して再実行します。Release本文へ生成ブロックとsource/CI/既知の制限・ライセンス案内を反映し、承認範囲と照合してPublishします。Publish後に本文を再読取し、匿名API・実ZIP・本文ブロックを隔離stagingでPowerShell 5.1/7検証します。自動公開workflowは追加しません。
 
 ライセンスは独自コードのLICENSEと第三者のTHIRD-PARTY-NOTICES.txtを区別し、両方を新配布へ含めます。旧Releaseのarchive/tagは上書きせず、対象archive名・SHAを記載した付属NOTICEと本文への補足を追加します。Node/Commander/Tunnelは上流から別取得し、offline同梱やmirrorは行いません。
+
+## AGPL-3.0-only の対応ソースと公開順序
+
+新規配布には LICENSE、COPYRIGHT、CHANGES.md、THIRD-PARTY-NOTICES.txt、licensing.md を同梱します。
+正式な条件・依存物の境界・改変版の表示は [licensing.md](licensing.md) を参照してください。
+source bundle 作成は Python 3.12 以上を使用し、clean な配布対象 commit で
+`python scripts/package-source.py --output dist/source` を実行し、
+同じ commit の Go 依存ソースを vendor した `xpotato-tunnel-VERSION-source.tar.gz` と
+その `.sha256` を同じ Release へ置きます。CI の corresponding-source artifact は候補であり、
+その upload は Release 発行ではありません。source bundle と両 OS の配布物を照合してから
+公開します。Node/Commander/Tunnel の取得済み runtime はこの source bundle に含めません。
+
+private の Actions 枠を追加消費しない場合は、公開前監査・ローカル検証・独立レビューを
+完了し、公開範囲の未解決事項について本人の判断を得てから、承認された当 repo のみ public
+へ変更します。その後に標準 runner で PR の正確な head を検証し、成功後に merge します。
+merge 後の配布対象 main SHA も検証し、その検証済み commit の候補から Release を作成します。
+CI を無視した merge や、未実行のチェックを成功扱いする運用にはしません。
+
+private 中にレビュー用修正を push する必要がある場合は、現行 workflow の trigger が
+push/pull_request のみであることを再確認し、commit に `[skip ci]` を付けます。チェックは
+未実行・Pending として扱います。public 化後は skip 指示のない新しい commit で最終 head の
+全チェックを起動し、その head を再レビュー対象として固定します。公開だけで過去の失敗が
+成功へ変わるとは扱いません。公開する内容が未判断なら private のまま保持します。

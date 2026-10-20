@@ -49,7 +49,7 @@ func TestDiagnosticsAreExplicitAndStartOnly(t *testing.T) {
 	}
 }
 func TestHelpAndVersionNeedNoIdentityOrHome(t *testing.T) {
-	for _, args := range [][]string{{"--help"}, {"version"}} {
+	for _, args := range [][]string{{"--help"}, {"version"}, {"about"}, {"license"}, {"source"}} {
 		if _, _, e := parse(args); e != nil {
 			t.Fatal(e)
 		}
