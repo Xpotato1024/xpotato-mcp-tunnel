@@ -60,6 +60,9 @@ def assemble(binary, output, version, commit, platform, dirty, build_info,
     for doc in DOCS:
         shutil.copy2(ROOT / "docs" / doc, content / doc)
     shutil.copy2(ROOT / "docs/quickstart.md", content / "README.md")
+    shutil.copy2(ROOT / "THIRD-PARTY-NOTICES.txt", content / "THIRD-PARTY-NOTICES.txt")
+    if platform.startswith("windows"):
+        shutil.copy2(ROOT / "scripts/verify-windows.ps1", content / "verify-windows.ps1")
     shutil.copytree(ROOT / "docs/performance-results", content / "performance-results")
     shutil.copy2(ROOT / "setup.env.example", content / "setup.env.example")
     # The executable path printed by `go version -m` depends on the build machine.

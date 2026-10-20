@@ -63,6 +63,9 @@ class PackageTests(unittest.TestCase):
                 packaging.verify(content)
                 metadata = json.loads((content / "build-info.json").read_text())
                 self.assertFalse(metadata["runtimeIncluded"])
+                self.assertTrue((content / "THIRD-PARTY-NOTICES.txt").is_file())
+                if platform.startswith("windows"):
+                    self.assertTrue((content / "verify-windows.ps1").is_file())
                 self.assertEqual(metadata["commit"], "a" * 40)
                 self.assertIn("0.2.7-" + platform, archive.name)
                 if platform.startswith("windows"):
