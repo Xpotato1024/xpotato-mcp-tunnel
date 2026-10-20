@@ -1,6 +1,8 @@
 package processctrl
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -10,6 +12,33 @@ import (
 	"testing"
 	"time"
 )
+
+func TestContextCancellationReapsOwnedTree(t *testing.T) {
+	heartbeat := filepath.Join(t.TempDir(), "owned-context")
+	exe, _ := os.Executable()
+	cmd := exec.Command(exe, "-test.run=^TestOwnedTreeFixture$")
+	cmd.Env = append(os.Environ(), "XPOTATO_TREE_MODE=parent-wait", "XPOTATO_TREE_HEARTBEAT="+heartbeat)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, e := RunContext(ctx, cmd, nil, 100*time.Millisecond); done <- e }()
+	waitFile(t, heartbeat)
+	cancel()
+	select {
+	case e := <-done:
+		if !errors.Is(e, context.Canceled) {
+			t.Fatal("cancel lost", e)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("owned tree cancellation stuck")
+	}
+	before, _ := os.ReadFile(heartbeat)
+	time.Sleep(150 * time.Millisecond)
+	after, _ := os.ReadFile(heartbeat)
+	if string(before) != string(after) {
+		t.Fatal("cancelled child tree still running")
+	}
+}
 
 func waitFile(t *testing.T, p string) {
 	t.Helper()

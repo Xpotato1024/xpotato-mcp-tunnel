@@ -1,8 +1,14 @@
 # xpotato-mcp-tunnel
 
+**Xpotato.net / Xpotato1024** — プロジェクト固有コードは **AGPL-3.0-only**。
+[正式全文](LICENSE)・[帰属方針](COPYRIGHT)・[対応ソースと第三者依存の条件](docs/licensing.md)。
+`xpotato-tunnel about` / `license` / `source` で利用中の版からも確認できます。
+
+0.2.10では[更新処理の世代切替・取消・検証](docs/update-transactions.md)を改善し、Windowsの取得とdigest検証を一回の操作へまとめています。
+
 Windows/Linux amd64で、端末内のDesktop CommanderをOpenAIトンネルにつなぐGoコアです。Laptopで使うものは **Windows amd64用の配布物に入っている `xpotato-tunnel.exe`** です。Go/Node/npmやソースコードの事前導入は不要です。通常ユーザーが一度Setupし、次回から保存済みキーで起動できます。
 
-正式配布は **[v0.2.9](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.9)** です。同版の異なるバイナリを上書きしないため、既存0.2.7／0.2.8から更新する場合もこのReleaseのexeを使います。`setup`/`update`は固定版のNode・Commander・Tunnelをネットワークから取得します。配布物は完全オフライン用runtime同梱版ではありません。旧Node CLIは撤去済みです。
+正式配布は **[v0.2.10](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.10)** です。同版の異なるバイナリを上書きしないため、既存0.2.7／0.2.8から更新する場合もこのReleaseのexeを使います。`setup`/`update`は固定版のNode・Commander・Tunnelをネットワークから取得します。配布物は完全オフライン用runtime同梱版ではありません。旧Node CLIは撤去済みです。
 
 **v0.2.9は通常起動のログ設定エラーを修正しています。** 旧v0.2.8で`log level requires 'struct-text' or 'json' log format`と終了した場合も、新exeの`update`で既存設定・保存済みキー・Tunnel IDを維持して更新します。[旧版の障害と一時的な起動方法](docs/operations.md#v028のログ設定エラー)も参照できます。旧版tag/assetsは上書きしません。
 
@@ -10,11 +16,11 @@ Windows/Linux amd64で、端末内のDesktop CommanderをOpenAIトンネルに�
 
 [導入の入口](docs/quickstart.md) に、入手先の選び方、展開、checksum/version確認、新規Setup、既存環境のupdate、起動・停止をまとめています。
 
-- Windows Laptop: [v0.2.9 ZIP](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-windows-amd64.zip)と[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-windows-amd64.zip.sha256)。一度展開するとexeとガイドが出ます。
-- Linux: [v0.2.9 tar.gz](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-linux-amd64.tar.gz)と[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.9/xpotato-tunnel-0.2.9-linux-amd64.tar.gz.sha256)。
-- privateリポジトリのためアクセス権とGitHubログインが必要です。[Actions](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/workflows/windows-tests.yml)の14日期限artifactはレビュー・検証用で、正式導入にはReleaseを選びます。
+- Windows Laptop: [固定Release v0.2.10](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.10)本文の検証ブロックを一回実行。ZIP取得・GitHub側digest照合・安全な展開まで行い、別のSHAファイルは不要です。
+- Linux: [v0.2.10 tar.gz](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.10/xpotato-tunnel-0.2.10-linux-amd64.tar.gz)と[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.10/xpotato-tunnel-0.2.10-linux-amd64.tar.gz.sha256)。
+- 公開後は認証なしで取得できます。[Actions](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/workflows/windows-tests.yml)の14日期限artifactはレビュー・検証用で、正式導入にはReleaseを選びます。
 
-WindowsはZIPと同名の`.zip.sha256`を両方保存し、[quickstartの検証ブロック](docs/quickstart.md)をまとめて実行してください。不足やchecksumエラーの後に、展開の行だけを続けて実行しません。既に展開済みのフォルダーは再展開せず検証できます。
+Windowsは[quickstart](docs/quickstart.md)を読み、固定Releaseの検証ブロックを全体で実行します。APIやdigestの失敗時は止まり、既存の展開先は上書きしません。exe・setup・updateは自動実行しません。
 
 - 初めて使う: レビュー済み配布物を展開し、通常の対話端末で新exeの`setup`を実行。
 - 既に使っている: 新しい配布exeの`update`を実行。同じhome/deviceと保存済みキーを再利用。

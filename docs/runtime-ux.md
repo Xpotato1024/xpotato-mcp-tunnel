@@ -1,6 +1,6 @@
 # Setup・Update・Start とツールの表示
 
-正式配布は[Release v0.2.9](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.9)です。同じコア版の別バイナリは上書きしません。CIの同版再ビルドを正式Releaseの代わりにupdateへ使わず、新しい配布には新しい版番号を使います。固定 Node 24.14.0／Tunnel 0.0.16／Commander 0.2.52、通信周期・認証・許可範囲は変更しません。
+正式配布は[Release v0.2.10](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.10)です。同じコア版の別バイナリは上書きしません。CIの同版再ビルドを正式Releaseの代わりにupdateへ使わず、新しい配布には新しい版番号を使います。固定 Node 24.14.0／Tunnel 0.0.16／Commander 0.2.52、通信周期・認証・許可範囲は変更しません。
 
 ## 待機の表示
 

@@ -2,7 +2,7 @@
 
 現行入口は `cmd/xpotato-tunnel` のGoコアです。PS/cmd/shは保存済みexeへ引数を渡し、Desktop Commanderだけに固定Nodeを使います。旧Node CLIと専用テスト/npm入口はGit追跡コードから撤去しました。既存core/shim更新互換と旧版保持は維持しています。まず [導入・更新の入口](quickstart.md) を参照してください。
 
-正式配布は[Release v0.2.9](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.9)です。[表示仕様](runtime-ux.md)、[非秘密.env入力](setup-env.md)、[確認・診断](operations.md)を参照してください。インストーラの追加はありません。
+正式配布は[Release v0.2.10](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.10)です。[表示仕様](runtime-ux.md)、[非秘密.env入力](setup-env.md)、[確認・診断](operations.md)を参照してください。インストーラの追加はありません。
 
 ## 本人による導入
 
@@ -77,12 +77,12 @@ Setup は途中状態を保持します。保存を断ったり、ネットワ�
 | `doctor` | default 端末がなくても保存先と install lock を確認。`--device` では途中 Setup と runtime 状態も報告。Vault、実接続、アカウント登録を検査しない |
 | `credentials` | この端末の一レコードを、本人の新しい保存同意と非表示入力で置換 |
 | `update` | 実行したレビュー済みコアと同梱固定 runtime を導入し、同意済み短いコマンドと次回起動用参照を更新 |
-| `rollback` | 保存済みの前 runtime へ参照を戻す。現コアが認識する版に限る |
+| `rollback` | 候補0.2.10では保存済みの前core/runtimeの組へ戻す。現管理coreが全検証できる互換runtimeに限る |
 | `plugin` | 登録用情報／指定済み直接 MCP endpoint の bundle を再生成 |
 
 固定依存はNode24.14.0、Tunnel runtime0.0.16、Desktop Commander0.2.52です。`internal/managed/assets/package-lock.json`を埋め込み、runtime内のnpm ci --ignore-scriptsで推移依存を固定します。rootの旧npm入口とは別です。ripgrepとOS別binaryもlockに含み、Chrome自動取得抑止は保持します。
 
-更新は、取得したレビュー済み新パッケージの `./xpotato-tunnel update`（Windows は `.\xpotato-tunnel.exe update`）を本人が明示実行します。コア、固定 runtime、同意済みの短いコマンドを切り替え、稼働中の接続は再起動しません。Start で npm/Git／パッケージ取得を行わず、背景の自動更新も行いません。実行ファイルは検証済みの同一ディレクトリ stage から atomic rename し、ラッパーの途中更新は intent を使って同じ update の再実行で再開します。旧版と設定は保持します。同じコア版の異なるバイナリは上書きせず停止します。
+更新は、取得したレビュー済み新パッケージの `./xpotato-tunnel update`（Windows は `.\xpotato-tunnel.exe update`）を本人が明示実行します。稼働中の接続は再起動しません。Startでnpm/Git／パッケージ取得や背景の自動更新は行いません。候補0.2.10は新coreを先に検証し、同じ依存内容のruntimeを全検証して再利用できます。初回の短縮コマンド移行は旧coreへのfallbackを先に保存し、最後にcore/runtime参照を一つのdevice.jsonで切り替えます。失敗・取消・強制終了後は同じupdateで再開します。旧版と設定を保持し、同じcore版の異なるbytesは上書きしません。[候補の設計と制約](update-transactions.md)も参照してください。
 
 初回Setupに前runtimeはありません。rollbackは現コアが認識する保存済みruntimeに限り、任意の旧版へ戻す機能ではありません。
 

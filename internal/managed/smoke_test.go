@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/licensing"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,7 +64,7 @@ func TestManagedInstallSmoke(t *testing.T) {
 	cmd := exec.CommandContext(ctx, node, filepath.Join(dir, "stdio.mjs"), "--no-onboarding", "--activity-color")
 	var activity bytes.Buffer
 	cmd.Stderr = &activity
-	cmd.Env = append(cleanEnv(os.Environ(), "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY", "NODE_OPTIONS", "NODE_PATH", "PATH"), "PATH=", "XPOTATO_MCP_PROFILE="+profile, "XPOTATO_MCP_COMMANDER_ENTRY="+filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"))
+	cmd.Env = append(cleanEnv(os.Environ(), "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY", "NODE_OPTIONS", "NODE_PATH", "PATH", "XPOTATO_MCP_SOURCE_INFO"), "PATH=", "XPOTATO_MCP_SOURCE_INFO="+licensing.JSON("smoke"), "XPOTATO_MCP_PROFILE="+profile, "XPOTATO_MCP_COMMANDER_ENTRY="+filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"))
 	stdin, e := cmd.StdinPipe()
 	if e != nil {
 		t.Fatal(e)
@@ -96,7 +97,10 @@ func TestManagedInstallSmoke(t *testing.T) {
 			}
 		}
 	}
-	request(1, "initialize", map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "xpotato-smoke", "version": "0"}})
+	initialized := request(1, "initialize", map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "xpotato-smoke", "version": "0"}})
+	if !bytes.Contains(initialized["result"], []byte("xpotato_tunnel_source")) {
+		t.Fatal("network source offer missing")
+	}
 	fmt.Fprintln(stdin, `{"jsonrpc":"2.0","method":"notifications/initialized"}`)
 	result := request(2, "tools/list", map[string]any{})
 	var tools struct {
@@ -106,6 +110,13 @@ func TestManagedInstallSmoke(t *testing.T) {
 		t.Fatal("empty tools list")
 	}
 	t.Logf("isolated initialize/tools-list succeeded; toolCount=%d; no credential or control-plane connection", len(tools.Tools))
+	if !bytes.Contains(result["result"], []byte("xpotato_tunnel_source")) {
+		t.Fatal("source tool not listed")
+	}
+	sourceResult := request(1000, "tools/call", map[string]any{"name": "xpotato_tunnel_source", "arguments": map[string]any{}})
+	if !bytes.Contains(sourceResult["result"], []byte("AGPL-3.0-only")) {
+		t.Fatal("source tool unavailable through pinned SDK")
+	}
 	// Verify the packaged binary exists and is selected with no host PATH rg.
 	rgProbe := exec.Command(node, "--input-type=module", "-e", `import {rgPath} from '@vscode/ripgrep'; import fs from 'node:fs'; if (!rgPath.includes('node_modules') || !fs.existsSync(rgPath)) process.exit(2);`)
 	rgProbe.Dir = dir

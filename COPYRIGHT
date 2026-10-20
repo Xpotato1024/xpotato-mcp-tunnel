@@ -1,0 +1,20 @@
+xpotato-mcp-tunnel
+Project attribution and maintenance: Xpotato.net / Xpotato1024
+
+Project-specific original code is licensed under AGPL-3.0-only, as selected by
+the project maintainer. Copyright remains with the respective copyright holders;
+this attribution does not assign unverified ownership to the maintainer or
+relicense third-party material. No claim of exclusive ownership of all code is
+made. Existing third-party copyright notices and license conditions apply.
+
+See LICENSE for the complete GNU Affero General Public License version 3.
+There is no grant of permission to use later license versions.
+See THIRD-PARTY-NOTICES.txt and the licensing guide for component boundaries
+(licensing.md in binary packages; docs/licensing.md in the source tree).
+This notice does not retroactively change the licensing of previously released
+versions or grant rights the project maintainer does not hold.
+
+Modified versions must retain applicable legal notices, identify their changes
+and dates, and meet the AGPL obligations that apply to their distribution and
+network interaction. No additional advertising, noncommercial-only, trademark
+license, or blanket obligation to license unrelated code is imposed here.

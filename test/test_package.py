@@ -63,6 +63,15 @@ class PackageTests(unittest.TestCase):
                 packaging.verify(content)
                 metadata = json.loads((content / "build-info.json").read_text())
                 self.assertFalse(metadata["runtimeIncluded"])
+                self.assertTrue((content / "THIRD-PARTY-NOTICES.txt").is_file())
+                self.assertEqual((content / "LICENSE").read_bytes(), (packaging.ROOT / "LICENSE").read_bytes())
+                self.assertEqual((content / "COPYRIGHT").read_bytes(), (packaging.ROOT / "COPYRIGHT").read_bytes())
+                self.assertTrue((content / "licensing.md").is_file())
+                self.assertNotIn("../LICENSE",(content / "licensing.md").read_text(encoding="utf-8"))
+                self.assertIn("[LICENSE](LICENSE)",(content / "licensing.md").read_text(encoding="utf-8"))
+                self.assertIn("(licensing.md)",(content / "CHANGES.md").read_text(encoding="utf-8"))
+                if platform.startswith("windows"):
+                    self.assertTrue((content / "verify-windows.ps1").is_file())
                 self.assertEqual(metadata["commit"], "a" * 40)
                 self.assertIn("0.2.7-" + platform, archive.name)
                 if platform.startswith("windows"):

@@ -33,8 +33,13 @@ jobs:
         env:
           XPOTATO_RUNTIME_SMOKE: '1'
       - run: go vet ./...
+      - name: Race checks for update and launch fixtures
+        if: runner.os == 'Linux'
+        run: go test -race -count=1 ./internal/atomicfile ./internal/core ./internal/managed ./internal/processctrl ./cmd/xpotato-tunnel
+        env:
+          XPOTATO_RUNTIME_SMOKE: '0'
       - name: Package regression tests
-        run: python -m unittest discover -s test -p "test_package.py" -v
+        run: python -m unittest discover -s test -p "test_*.py" -v
       - name: Build review package (no publishing)
         id: package
         shell: bash
@@ -55,6 +60,23 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./test/quickstart.test.ps1 -BinaryPath ./dist/xpotato-tunnel.exe
+      - name: Corresponding source candidate and reproducibility (no publishing)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python scripts/package-source.py --output dist/source
+          python scripts/package-source.py --output dist/source-repeat
+          cmp dist/source/*.tar.gz dist/source-repeat/*.tar.gz
+      - name: Upload corresponding source candidate (no publishing)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: corresponding-source-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            dist/source/*.tar.gz
+            dist/source/*.sha256
+          if-no-files-found: error
+          retention-days: 14
       - name: Windows PowerShell 5.1 quickstart regression checks
         if: runner.os == 'Windows'
         shell: powershell
@@ -117,4 +139,5 @@ jobs:
           node-version: '24'
       - run: node --check internal/managed/assets/stdio.mjs
       - run: node --check internal/managed/assets/activity.mjs
-      - run: node --test test/activity.test.mjs
+      - run: node --check internal/managed/assets/licensing.mjs
+      - run: node --test test/activity.test.mjs test/licensing.test.mjs

@@ -1,0 +1,66 @@
+& {
+    param([string] $ArchivePath, [string] $DestinationPath)
+    $ErrorActionPreference = 'Stop'
+    # Fixed GitHub release @@RELEASE_ID@@, asset @@ASSET_ID@@; source @@COMMIT@@.
+    $base = 'https://github.com/Xpotato1024/xpotato-mcp-tunnel'
+    $api = 'https://api.github.com/repos/Xpotato1024/xpotato-mcp-tunnel'
+    $name = 'xpotato-tunnel-@@VERSION@@-windows-amd64.zip'
+    $temporary = $null
+    $tls = [Net.ServicePointManager]::SecurityProtocol
+    try {
+    [Net.ServicePointManager]::SecurityProtocol = $tls -bor [Net.SecurityProtocolType]::Tls12
+    $release = Invoke-RestMethod -Uri "$api/releases/tags/v@@VERSION@@" -TimeoutSec 60
+    $tag = Invoke-RestMethod -Uri "$api/git/ref/tags/v@@VERSION@@" -TimeoutSec 60
+    $object = $tag.object
+    for ($i = 0; $object.type -eq 'tag' -and $i -lt 8; $i++) {
+        if ($object.sha -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid annotated tag' }
+        $object = (Invoke-RestMethod -Uri "$api/git/tags/$($object.sha)" -TimeoutSec 60).object
+    }
+    if ($object.type -isnot [string] -or $object.sha -isnot [string] -or
+        $object.type -cne 'commit' -or $object.sha -cne '@@COMMIT@@') { throw 'Release tag/source mismatch' }
+    if (($release.id -isnot [int] -and $release.id -isnot [long]) -or
+        $release.tag_name -isnot [string] -or $release.html_url -isnot [string] -or
+        $release.draft -isnot [bool] -or $release.prerelease -isnot [bool] -or $release.assets -isnot [array] -or
+        $release.id -ne @@RELEASE_ID@@ -or $release.tag_name -cne 'v@@VERSION@@' -or
+        $release.html_url -cne "$base/releases/tag/v@@VERSION@@" -or
+        $release.draft -ne $false -or $release.prerelease -ne $false) { throw 'Wrong or unpublished release' }
+    $assets = @($release.assets | Where-Object { $_.name -is [string] -and $_.name -ceq $name })
+    if ($assets.Count -ne 1) { throw 'Windows asset missing or ambiguous' }
+    $asset = $assets[0]
+    if (($asset.id -isnot [int] -and $asset.id -isnot [long]) -or
+        ($asset.size -isnot [int] -and $asset.size -isnot [long]) -or
+        $asset.state -isnot [string] -or $asset.browser_download_url -isnot [string] -or $asset.digest -isnot [string] -or
+        $asset.id -ne @@ASSET_ID@@ -or $asset.state -cne 'uploaded' -or $asset.size -ne @@SIZE@@ -or
+        $asset.browser_download_url -cne "$base/releases/download/v@@VERSION@@/$name" -or
+        $asset.digest -cne 'sha256:@@SHA256@@') { throw 'GitHub asset identity/digest mismatch' }
+    if (-not $ArchivePath) {
+        $temporary = Join-Path ([IO.Path]::GetTempPath()) ('xpotato-download-' + [guid]::NewGuid().ToString('N'))
+        [IO.Directory]::CreateDirectory($temporary) | Out-Null
+        $ArchivePath = Join-Path $temporary $name
+        Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $ArchivePath -TimeoutSec 60
+    }
+    if ([IO.Path]::GetFileName($ArchivePath) -cne $name) {
+        throw 'Wrong ZIP name; save the fixed release asset without a (1) suffix'
+    }
+    $bytes = [IO.File]::ReadAllBytes($ArchivePath)
+    if ($bytes.LongLength -ne @@SIZE@@) { throw 'ZIP size mismatch; download again from this release' }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $hash = [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    if ($hash -cne '@@SHA256@@') { throw 'ZIP SHA256 mismatch; stop and download again' }
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $memory = [IO.MemoryStream]::new($bytes, $false)
+    $zip = [IO.Compression.ZipArchive]::new($memory, [IO.Compression.ZipArchiveMode]::Read)
+    try {
+        $entries = @($zip.Entries | Where-Object { $_.FullName -ieq 'verify-windows.ps1' })
+        if ($entries.Count -ne 1 -or $entries[0].FullName -cne 'verify-windows.ps1') { throw 'Verifier missing or ambiguous' }
+        $reader = [IO.StreamReader]::new($entries[0].Open())
+        try { $verifier = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } finally { $zip.Dispose(); $memory.Dispose() }
+    & ([scriptblock]::Create($verifier)) -ArchiveBytes $bytes -DestinationPath $DestinationPath -ExpectedVersion '@@VERSION@@' -ExpectedCommit '@@COMMIT@@'
+    } finally {
+        [Net.ServicePointManager]::SecurityProtocol = $tls
+        if ($temporary -and [IO.Directory]::Exists($temporary)) { [IO.Directory]::Delete($temporary, $true) }
+    }
+} -DestinationPath "$HOME\Apps\xpotato-tunnel-@@VERSION@@"

@@ -218,11 +218,22 @@ func (a App) reconfigure(o Options) (Options, error) {
 			return o, e
 		}
 	}
+	if a.InstalledCore != nil {
+		pin, err := a.InstalledCore(o.Home)
+		if err != nil {
+			return o, err
+		}
+		if next.Core == nil || *next.Core != pin || next.Release != d.Release {
+			next.Previous = d.Release
+			next.PreviousCore = d.Core
+			next.Core = &pin
+		}
+	}
 	if !r.unchanged(o) {
 		return o, errors.New("保存処理中に旧設定が変わりました。旧端末の参照は保持しました")
 	}
 	// Single atomic publication: old profile and credential records remain.
-	if e = atomicJSON(deviceFile(o), next); e != nil {
+	if e = a.saveDevice(o, next); e != nil {
 		return o, e
 	}
 	if e = Registration(o, next); e != nil {

@@ -2,24 +2,29 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/core"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/display"
+	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/licensing"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/managed"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/platform"
 	"golang.org/x/term"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
   setup [--env-file PATH] [--device NAME] [--tunnel-id ID] [--allow ABSOLUTE_DIR ...]
   start | doctor | update | rollback | credentials | plugin
+  version | about | license | source (no setup or credentials required)
   --home ABSOLUTE_DIR  (all commands)
   --device NAME       (omit to use setup's default device)
   --activity-details  (start only; conservative argument display on stderr)
@@ -102,7 +107,7 @@ func parse(args []string) (string, core.Options, error) {
 	if command == "help" || (len(args) > 0 && (args[0] == "--help" || args[0] == "-h")) {
 		return "help", core.Options{}, nil
 	}
-	if command == "version" {
+	if command == "version" || command == "about" || command == "license" || command == "source" {
 		return command, core.Options{}, nil
 	}
 	if !strings.Contains("|setup|start|doctor|update|rollback|credentials|plugin|", "|"+command+"|") {
@@ -170,6 +175,11 @@ func parse(args []string) (string, core.Options, error) {
 	return command, o, nil
 }
 func run(args []string) (int, error) {
+	if len(args) > 0 && args[0] == "_dispatch" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return dispatch(ctx, args[1:])
+	}
 	command, o, e := parse(args)
 	if e != nil {
 		return 1, e
@@ -182,14 +192,28 @@ func run(args []string) (int, error) {
 		fmt.Println(core.Version)
 		return 0, nil
 	}
-	runtimeManager := managed.Manager{ActivityDetails: o.ActivityDetails, Diagnostics: o.Diagnostics}
+	if command == "about" || command == "license" {
+		fmt.Print(licensing.Attribution)
+		fmt.Println("\nCorresponding source: xpotato-tunnel source")
+		if command == "license" {
+			fmt.Print("\n" + licensing.Text)
+		}
+		return 0, nil
+	}
+	if command == "source" {
+		fmt.Println(licensing.JSON(core.Version))
+		return 0, nil
+	}
+	ctx, stop := operationContext(command)
+	defer stop()
+	runtimeManager := managed.Manager{Context: ctx, ActivityDetails: o.ActivityDetails, Diagnostics: o.Diagnostics}
 	var report func(string)
 	if command == "setup" {
 		style := display.Detect(os.Stderr)
 		// Keep Setup progress ordered before the next interactive input prompt.
 		runtimeManager.Progress = func(message string) { fmt.Fprint(os.Stderr, style.Format(message)) }
 	}
-	if command == "start" || command == "update" {
+	if command == "start" || command == "update" || command == "rollback" {
 		style := display.Detect(os.Stderr)
 		reporter := display.New(os.Stderr, style)
 		defer reporter.Close()
@@ -200,7 +224,7 @@ func run(args []string) (int, error) {
 			report("内部診断ログ有効（INFO、HTTP raw無効、認証値をマスク）")
 		}
 	}
-	a := core.App{Progress: report, Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: runtimeManager, InstallCommand: managed.InstallCommand}
+	a := core.App{Context: ctx, PrepareUpdate: runtimeManager.PrepareCommand, InstalledCore: managed.InstalledCore, RunningCore: managed.RunningCore, VerifyCore: managed.VerifyCore, Progress: report, Identity: platform.CurrentIdentity, Vault: platform.NativeVault{}, Prompt: terminal{}, Runtime: runtimeManager, InstallCommand: managed.InstallCommand}
 	if command == "setup" {
 		a.PreviewCommand = managed.PreviewCommand
 		userHome, err := os.UserHomeDir()

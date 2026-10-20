@@ -17,7 +17,7 @@ func TestOlderRuntimePinRequiresReviewedRefresh(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	old := strings.Replace(releaseID(m), "core-"+core.Version+"-", "core-0.2.2-", 1)
+	old := "core-0.2.2-" + m.Platform + "-tunnel-" + tunnelVersion + "-dc-" + commanderVersion + "-node-" + nodeVersion
 	if e = (Manager{}).Verify(t.TempDir(), old); !errors.Is(e, core.ErrRuntimePinUnsupported) {
 		t.Fatal("older pin was implicitly adopted", e)
 	}
@@ -46,6 +46,22 @@ func TestNativeArgumentPreservesQuotedSpaces(t *testing.T) {
 	e = cmd.Run()
 	if exit, ok := e.(*exec.ExitError); !ok || exit.ExitCode() != 42 {
 		t.Fatalf("native command argument changed: %v", e)
+	}
+}
+
+func TestSourceOfferComesFromCoreNotAmbientEnvironment(t *testing.T) {
+	env := runtimeEnvironment([]string{"XPOTATO_MCP_SOURCE_INFO=malicious-private-source"}, "fixture-run", "fixture-profile", "fixture-entry", nil)
+	count := 0
+	for _, item := range env {
+		if strings.HasPrefix(item, "XPOTATO_MCP_SOURCE_INFO=") {
+			count++
+			if strings.Contains(item, "malicious") || !strings.Contains(item, `"license":"AGPL-3.0-only"`) || !strings.Contains(item, "Xpotato.net / Xpotato1024") {
+				t.Fatal("untrusted source offer")
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatal("source offer missing or duplicated")
 	}
 }
 func TestUntrustedAmbientTunnelConfigurationCannotRouteSavedKey(t *testing.T) {
