@@ -1,8 +1,8 @@
-# 共通 GUI と配布の責務（未公開候補）
+# 共通 GUI と配布の責務（v0.2.11）
 
 PR #14 の通常検査・runtime transaction を土台に、Go core を維持した Tauri 2 の薄い GUI を追加します。
 この文書の存在やクロスコンパイルだけで、macOS/ARM・署名・各 desktop の利用体験を検証済みとは扱いません。
-公開・merge・実 Laptop 導入は今回の作業に含みません。
+Windows/Linux の導入は以下の手順を使います。Mac の公開・署名・実機確認は保留です。
 
 ## 利用者の手順
 
@@ -20,7 +20,7 @@ GUI を開くだけでは、runtime 取得、キー取得・保存、設定変�
 | 対象 | 通常の入口 | アプリ本体の更新・削除 | runtime・データの管理 |
 | --- | --- | --- | --- |
 | Windows x64 | PR #14 のユーザー単位 NSIS に GUI と Go sidecar を同梱 | 同じ NSIS の段階配置、HKCU、Start menu、アプリ一覧。既存プロセスを強制終了しない | GUI から Go の明示操作。データ・キー・旧世代は保持 |
-| macOS Intel/Apple Silicon | arch ごとの .app を入れた DMG | 個人用 ~/Applications を基本とする Finder 配置・置換・削除。全ユーザー pkg は採用しない | 共通 GUI/Go。Keychain・排他・所有子プロセス管理・arch 別の固定 runtime を使用 |
+| macOS Intel/Apple Silicon（公開保留） | 将来の形式: arch ごとの .app を入れた DMG | 個人用 ~/Applications を基本とする Finder 配置・置換・削除。全ユーザー pkg は採用しない | 共通 GUI/Go。Keychain・排他・所有子プロセス管理・arch 別の固定 runtime を使用 |
 | Linux | 対象を Ubuntu 24.04 系 desktop の .deb から始める | OS の package manager GUI に入れ替え・削除を任せる。この操作だけ OS の管理者承認が必要 | backend は通常ユーザーで動き、既存 Secret Service を使用。root 実行・サービス登録をしない |
 
 Linux はまず .deb に限定し、RPM/FUSE/AppImage と別々の自動更新器を同時に保守しません。
@@ -51,9 +51,8 @@ Start の runtime stdin とログを bridge pipe から切り離し、Go の既�
 - GUI の非秘密表示、入力消去、進行・中断・timeout・失敗の状態遷移とキーボード操作。
 - 各 OS の native build、同梱 sidecar digest 拒否、Windows の隔離 Installer fixture。
 - CI は各 OS の native build・所有プロセス・固定 runtime smoke を実行する。Keychain の実キー保存、実 desktop、署名/notarization は CI の証明対象に含めない。
-- Cargo.lock を固定し、crate のライセンス本文と NOTICE を同梱する。Cargo vendor と Go vendor を含む対応 source を Linux CI で作る。
+- Cargo.lock を固定し、crate のライセンス本文と NOTICE を同梱する。単一 target profile から Windows/Linux 用の Go/Rust vendor を含む対応 source を作り、両 native host で再構築する。
 
-2026-10-21: 保留解除後に native build と fixture 検証を開始。最終結果は PR の exact-head CI と作業報告を参照する。
 Tauri の採用は共通 UI の保守を１か所にするためで、Tunnel の Go 実装を置き換えるものではありません。
 
 参考: [Tauri sidecar](https://v2.tauri.app/develop/sidecar/)、[capability](https://v2.tauri.app/security/capabilities/)、
@@ -71,5 +70,5 @@ Mac の最低版は固定 [Node 24.14.0 の要件](https://github.com/nodejs/nod
 
 ## 段階公開の対象
 
-現在の配布候補は Windows x64 / Ubuntu 24.04 x64 です。Mac は同じ共通実装の native build/test を維持し、公開候補の梱包/upload を保留します。
+配布対象は Windows x64 / Ubuntu 24.04 x64 です。Mac は同じ共通実装の native build/test を維持し、公開候補の梱包/upload を保留します。
 単一 target profile から SDK binding 実装を除いた対応 source を生成し、両 native host で offline 再構築します。詳細は [source distribution](source-distribution.md) を参照してください。

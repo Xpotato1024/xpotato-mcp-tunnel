@@ -1,32 +1,34 @@
 # xpotato-mcp-tunnel
 
-> 未公開候補: Windows/Mac/Ubuntu 共通 GUI の [導入・更新・削除](docs/gui-lifecycle.md) と、通常経路の全件 runtime 再走査を除く [検査境界](docs/installer-lifecycle.md) を実装しています。現在の正式配布は v0.2.10 のままです。候補は Draft PR の CI artifact で確認し、署名・実機確認・公開は別途判断します。
+Windows x64 / Ubuntu 24.04 desktop x64 で、端末内の Desktop Commander を OpenAI トンネルにつなぐアプリです。導入・接続・更新・修復は共通の日本語 GUI、Tunnel core は Go を使用します。Mac は同じ共通実装を維持し、公開を保留しています。
 
 **Xpotato.net / Xpotato1024** — プロジェクト固有コードは **AGPL-3.0-only**。
 [正式全文](LICENSE)・[帰属方針](COPYRIGHT)・[対応ソースと第三者依存の条件](docs/licensing.md)。
-`xpotato-tunnel about` / `license` / `source` で利用中の版からも確認できます。
-
-0.2.10では[更新処理の世代切替・取消・検証](docs/update-transactions.md)を改善し、Windowsの取得とdigest検証を一回の操作へまとめています。
-
-Windows/Linux amd64で、端末内のDesktop CommanderをOpenAIトンネルにつなぐGoコアです。Laptopで使うものは **Windows amd64用の配布物に入っている `xpotato-tunnel.exe`** です。Go/Node/npmやソースコードの事前導入は不要です。通常ユーザーが一度Setupし、次回から保存済みキーで起動できます。
-
-正式配布は **[v0.2.10](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.10)** です。同版の異なるバイナリを上書きしないため、既存0.2.7／0.2.8から更新する場合もこのReleaseのexeを使います。`setup`/`update`は固定版のNode・Commander・Tunnelをネットワークから取得します。配布物は完全オフライン用runtime同梱版ではありません。旧Node CLIは撤去済みです。
-
-**v0.2.9は通常起動のログ設定エラーを修正しています。** 旧v0.2.8で`log level requires 'struct-text' or 'json' log format`と終了した場合も、新exeの`update`で既存設定・保存済みキー・Tunnel IDを維持して更新します。[旧版の障害と一時的な起動方法](docs/operations.md#v028のログ設定エラー)も参照できます。旧版tag/assetsは上書きしません。
+`xpotato-tunnel about` / `license` / `source` でも利用中の版を確認できます。
 
 ## 使い始める・更新する
 
-[導入の入口](docs/quickstart.md) に、入手先の選び方、展開、checksum/version確認、新規Setup、既存環境のupdate、起動・停止をまとめています。
+[v0.2.11 Release](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.11) から OS 用の導入ファイルを取得します。公開前のリンクは利用できません。Actions の期限付き artifact は開発・レビュー用です。
 
-- Windows Laptop: [固定Release v0.2.10](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.10)本文の検証ブロックを一回実行。ZIP取得・GitHub側digest照合・安全な展開まで行い、別のSHAファイルは不要です。
-- Linux: [v0.2.10 tar.gz](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.10/xpotato-tunnel-0.2.10-linux-amd64.tar.gz)と[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.10/xpotato-tunnel-0.2.10-linux-amd64.tar.gz.sha256)。
-- 公開後は認証なしで取得できます。[Actions](https://github.com/Xpotato1024/xpotato-mcp-tunnel/actions/workflows/windows-tests.yml)の14日期限artifactはレビュー・検証用で、正式導入にはReleaseを選びます。
+| 環境 | 通常導入の入口 |
+| --- | --- |
+| Windows x64 | [xpotato-tunnel-0.2.11-windows-amd64-setup.exe](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/xpotato-tunnel-0.2.11-windows-amd64-setup.exe) |
+| Ubuntu 24.04 desktop x64 | [xpotato-tunnel-0.2.11-linux-amd64.deb](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/xpotato-tunnel-0.2.11-linux-amd64.deb) |
 
-Windowsは[quickstart](docs/quickstart.md)を読み、固定Releaseの検証ブロックを全体で実行します。APIやdigestの失敗時は止まり、既存の展開先は上書きしません。exe・setup・updateは自動実行しません。
+詳しい [導入・更新・修復・削除](docs/gui-lifecycle.md) を参照してください。Windows の Installer は英語画面、導入後のアプリは日本語です。Windows は既存の WebView2 Evergreen、Ubuntu は WebKitGTK 4.1 とユーザーの Secret Service が前提です。Windows 候補は未署名で、発行者署名はありません。
 
-- 初めて使う: レビュー済み配布物を展開し、通常の対話端末で新exeの`setup`を実行。
-- 既に使っている: 新しい配布exeの`update`を実行。同じhome/deviceと保存済みキーを再利用。
-- 困ったとき: [確認・診断・再開](docs/operations.md)。設定を削除せず、保存版と稼働版を分けて確認。
+1. Installer／OS のパッケージ管理から配置し、Xpotato Tunnel を開く。
+2. 初めて使う場合は「初期設定・設定変更」で許可範囲と保存内容を確認し、同意後に API キーを非表示で入力する。
+3. 既存環境の更新は、同じプロファイル保存先・端末名で「この版で更新」を選ぶ。
+4. 「接続を開始」で起動し、停止は「このアプリの接続を停止」。他の既存接続は、その開始元で利用者自身が停止する。
+
+Go/Rust/Node/npm の事前導入は不要です。初回設定・runtime 再取得には通信が必要で、完全オフライン同梱ではありません。通常の導入・更新・修復・起動では、展開済み runtime の全件再読を必須にしません。取得時 SHA/SRI・安全な展開・限定した起動入口と構成の確認を維持し、重い全依存診断は明示操作だけです。
+
+アプリ本体の入れ替えは次版の Installer／deb、runtime の適用は「この版で更新」で行います。バックグラウンドの自動更新・既存プロセスの強制停止・OS権限やサービス設定の変更は行いません。削除後もプロファイル・保存済みキー・runtime は保持します。
+
+[対応ソース](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/xpotato-tunnel-0.2.11-source.tar.gz) は開発者向けです。[source の対象と再構築](docs/source-distribution.md)、[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/SHA256SUMS.txt) と [公開物の出自](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/release-provenance.json) を別途提供します。GitHub の自動生成 Source code archive は依存を含む対応ソースの代わりではありません。
+
+[v0.2.10 portable 手順](docs/quickstart.md) は同版の履歴として保持します。旧版のtag/assetは上書きしません。旧v0.2.8のログ設定エラーは [運用ガイド](docs/operations.md#v028のログ設定エラー) を参照してください。
 
 通常は「OpenAI トンネル」の接続変化とMCP処理イベント、警告・エラーをstderrへ表示し、正常待機の定例通知を出しません。内部INFOは`start --diagnostics`で明示表示します。`--activity-details`による引数表示は別の選択です。色だけに依存せず文字ラベルを併記し、非TTY/NO_COLORでは無色です。
 
@@ -50,4 +52,4 @@ node --test test/activity.test.mjs
 
 開発用Nodeは24以上。現行MCPアダプターと固定依存lockは`internal/managed/assets`にあります。GoのChrome自動取得抑止、旧core/shimの更新互換、不変runtimeと旧版保持は残しています。Go版のbenchmarkツールと0.2.5測定履歴も保持します。旧npm/npx CLI入口とその専用テストはありません。
 
-CIはWindows/LinuxのGo test/vet、隔離runtime連携、Node activity検証とレビュー用・Release候補の作成のみです。push/PRから本人端末へのデプロイ・公開・接続変更は行いません。
+CIは各OSの検証と候補作成です。Desktop GUI candidates は PR または手動実行で同じ pipeline を使い、Windows/Linux/source の照合済み bundle を作ります。公開は別の明示操作で、push/PR/手動buildからの自動Release・本人端末への導入は行いません。

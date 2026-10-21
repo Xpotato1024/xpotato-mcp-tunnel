@@ -80,7 +80,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: installer-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          name: core-only-installer-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             dist/installer/*-setup.exe
             dist/installer/*.sha256
@@ -97,7 +97,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: corresponding-source-${{ github.event.pull_request.head.sha || github.sha }}
+          name: core-only-source-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             dist/source/*.tar.gz
             dist/source/*.sha256

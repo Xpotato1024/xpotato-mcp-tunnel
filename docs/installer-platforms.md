@@ -8,7 +8,7 @@ Windows の NSIS は配置だけの外装として活用する。
 | 対象 | 配布形式と利用者の入口 | アプリ更新・削除 | 権限と制約 |
 | --- | --- | --- | --- |
 | Windows x64 | NSIS setup.exe → Start menu の共通 GUI | 新版 Installer / OS のアプリ一覧 | ユーザー領域、HKCU。OS 提供 WebView2 Evergreen が必要 |
-| macOS Intel / Apple Silicon | CPU 別 DMG 内の .app → 個人用 ~/Applications | 終了後 Finder で置換 / ゴミ箱へ移動 | 個人領域。未署名候補。Developer ID と notarization は別判断 |
+| macOS Intel / Apple Silicon（公開保留） | 将来の形式: CPU 別 DMG 内の .app → 個人用 ~/Applications | 終了後 Finder で置換 / ゴミ箱へ移動 | 個人領域。未署名候補。Developer ID と notarization は別判断 |
 | Ubuntu 24.04 desktop x64 | .deb → OS package manager GUI → アプリ一覧 | 次版 .deb / package manager GUI | 配置に OS 管理者承認。backend は通常ユーザー。WebKitGTK 4.1、Secret Service が必要 |
 
 共通 GUI は初期設定、許可範囲と保存同意、非表示キー入力、進捗、完了、接続・所有接続の停止を提供する。
@@ -37,5 +37,5 @@ OS の権限・AV・PATH・サービス・自動起動を変更する工程は�
 
 ## 段階公開の対象
 
-現在の配布候補は Windows x64 / Ubuntu 24.04 x64 です。Mac は同じ共通実装の native build/test を維持し、公開候補の梱包/upload を保留します。
+配布対象は Windows x64 / Ubuntu 24.04 x64 です。Mac は同じ共通実装の native build/test を維持し、公開候補の梱包/upload を保留します。
 単一 target profile から SDK binding 実装を除いた対応 source を生成し、両 native host で offline 再構築します。詳細は [source distribution](source-distribution.md) を参照してください。

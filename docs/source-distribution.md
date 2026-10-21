@@ -3,7 +3,7 @@
 公開対象の候補は Windows x64 と Ubuntu 24.04 x64、Mac は build/test のみの保留対象です。
 この方針は `packaging/source-profiles.json` の１つの profile に宣言します。
 Go の setup/update/connect、GUI、Mac adapter を複製・削除せず、同じ commit の共通実装を使います。
-CI は PR 検証と期限付き候補だけで、merge・Release・署名・自動公開をしません。
+CI は PR/手動実行の検証と期限付き候補生成だけで、merge・Release・署名・自動公開をしません。
 
 ## binding 実装を含めない仕組み
 

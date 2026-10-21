@@ -2,10 +2,11 @@ name: Desktop GUI candidates
 on:
   pull_request:
     branches: [main, feat/installer-lifecycle]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: desktop-gui-${{ github.event.pull_request.number }}
+  group: desktop-gui-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 env:
   GOMAXPROCS: '2'
@@ -19,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
@@ -39,7 +40,7 @@ jobs:
       - name: Source candidate for native offline rebuild gates
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: source-windows-linux-${{ github.event.pull_request.head.sha }}
+          name: source-windows-linux-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             dist/source/*.tar.gz
             dist/source/*.sha256
@@ -74,7 +75,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
@@ -164,18 +165,18 @@ jobs:
         if: steps.distribution.outputs.eligible == 'true'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: source-windows-linux-${{ github.event.pull_request.head.sha }}
+          name: source-windows-linux-${{ github.event.pull_request.head.sha || github.sha }}
           path: dist/source-download
       - name: Delivered source rebuild and tests (empty caches, Cargo frozen, Go proxy off)
         if: steps.distribution.outputs.eligible == 'true'
         shell: bash
         run: |
-          python scripts/check-source-bundle.py --archive "$(echo dist/source-download/*.tar.gz)" --target ${{ matrix.target }} --expected-commit ${{ github.event.pull_request.head.sha }} --output dist/source-rebuild
+          python scripts/check-source-bundle.py --archive "$(echo dist/source-download/*.tar.gz)" --target ${{ matrix.target }} --expected-commit ${{ github.event.pull_request.head.sha || github.sha }} --output dist/source-rebuild
       - name: Upload candidates for review (no release, signing or deployment)
         if: steps.distribution.outputs.eligible == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: desktop-${{ matrix.platform }}-${{ github.event.pull_request.head.sha }}
+          name: desktop-${{ matrix.platform }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             dist/gui/*.deb
             dist/gui/*.sha256
@@ -183,5 +184,27 @@ jobs:
             dist/installer/*.sha256
             dist/source-rebuild/build/SOURCE-REBUILD-RESULT.json
             dist/gui-native-ready.png
+          if-no-files-found: error
+          retention-days: 14
+
+  assemble:
+    name: Verified Windows/Linux release bundle
+    needs: [source, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist/desktop-input
+      - name: Verify one commit, source profile, rebuilds and eight public assets
+        run: python scripts/package-desktop-release.py --input dist/desktop-input --commit ${{ github.event.pull_request.head.sha || github.sha }} --ci-url https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} --output dist/desktop-release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-release-${{ github.event.pull_request.head.sha || github.sha }}
+          path: dist/desktop-release/*
           if-no-files-found: error
           retention-days: 14

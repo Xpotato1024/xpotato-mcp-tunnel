@@ -1,6 +1,6 @@
-# 導入・更新の入口
+# v0.2.10 portable の初回利用・更新（履歴）
 
-> 未公開 Draft の Installer / repair / 明示的 deep 診断は [installer-lifecycle](installer-lifecycle.md) を参照してください。以下は公開済み v0.2.10 の手順です。
+> v0.2.11 の通常導入・更新は [共通 GUI の利用手順](gui-lifecycle.md) を参照してください。以下は公開済み v0.2.10 portable 専用の固定手順です。新しい Installer／deb の手順や現在の通常 runtime 検査へ読み替えないでください。
 
 v0.2.10は更新時の完全検証の重複を減らし、core/runtimeの切替と取消・再開を改善しています。通常Startの完全検証は維持しています。v0.2.9のログ設定修正も含みます。旧v0.2.8からも、新exeの`update`で既存設定・保存済みキー・Tunnel IDを維持して更新できます。[旧版の障害と一時的な起動方法](operations.md#v028のログ設定エラー)も参照できます。
 

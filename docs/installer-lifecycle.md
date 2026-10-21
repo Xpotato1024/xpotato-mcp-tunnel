@@ -1,18 +1,19 @@
-# Installer と runtime 検査の設計（0.2.11 Draft）
+# Installer と runtime 検査の設計（0.2.11）
 
-これは未公開の変更案です。公開済み v0.2.10 の asset/tag は変更しません。
-Tunnel core は Go を維持します。Laptop への導入や既存プロセスの停止はこの開発作業に含みません。
-全OSの一般利用者向け入口は共通GUIを目標とし、現PRのターミナル保守画面は途中段階です。
+v0.2.11 は共通 GUI と Go core を使います。公開済み v0.2.10 の asset/tag は変更しません。
+配布対象は Windows x64 / Ubuntu 24.04 desktop x64、Mac は共通コードと native 検証を維持して公開保留です。
 [各OSの配布・GUI・署名・未対応範囲](installer-platforms.md) を参照してください。
 
 ## 利用者の入口
 
 Windows の通常導入は版付き `xpotato-tunnel-VERSION-windows-amd64-setup.exe` 一つを入口とします。
-ユーザー単位でアプリを配置し、最後に保守メニューを開きます。Setup / Start / Update / Repair / Doctor を選べます。
+ユーザー単位でアプリを配置し、完了画面またはスタートメニューから共通 GUI を開きます。
+「初期設定・設定変更」「接続を開始」「この版で更新」「runtime を再取得して修復」「簡易診断」を選べます。
 Setup は既存の許可フォルダー確認と、同意後の非表示キー入力を使います。Installer が新しい認証方式や同意済み扱いを追加することはありません。
 Go/Node/npm の事前導入は不要ですが、固定 runtime の初回取得には通信が必要です。
 
-Start は保存済みの core/runtime の選択に従います。停止は起動したターミナルで Ctrl+C です。
+「接続を開始」は保存済みの core/runtime の選択に従います。GUI の停止は「このアプリの接続を停止」で、この GUI が開始した接続だけを対象にします。
+CLI で開始した既存接続はそのターミナルの Ctrl+C で利用者自身が停止します。
 Update / Repair / Installer は既存プロセスを停止せず、更新は次の起動から適用します。
 Repair は同じ固定レシピから新しい世代を取得します。壊れた世代の上書き、rename、削除はしません。
 途中で失敗すると既存の選択を維持し、自分が作った一時 stage だけを片付けます。
@@ -30,7 +31,7 @@ Repair は同じ固定レシピから新しい世代を取得します。壊れ�
 | --- | --- | --- |
 | Go 独自 Installer | 現行コードを再利用できるが、GUI・登録・削除・更新処理を自作 | OS向けの外側を自作する保守を避ける |
 | Rust Installer | core を呼べるが、別 toolchain と独自 lifecycle 実装が増える | 今回の問題に対する利点が小さい |
-| Tauri | Rust と Web UI、Windows配布は NSIS/MSI、WebView2 の扱いも必要 | 全OS共通GUIの第一候補。現PRでは未実装 |
+| Tauri | Rust と Web UI、Windows配布は NSIS/MSI、WebView2 の扱いも必要 | 共通GUIに採用。Go backend と限定 pipe bridge を使う |
 | WiX MSI / Burn | Windows Installer の lifecycle を利用できる | MSI/component/bundle の管理が現状の用途には重い |
 | Inno Setup | ユーザー単位の一体型 Installer を作れる | 有力候補。既定のアプリ終了機能を無効化する設計が必要 |
 | **NSIS + Go** | NSIS は小さなユーザー単位の配置・削除、Go が既存の Setup/更新を担当 | **Windows外装の選択。共通GUIは別層** |
@@ -81,7 +82,7 @@ deep 診断は10分上限で、一時 reference の取得・展開・全走査�
 
 ## 配布内の分類
 
-通常利用者は Installer 一つから進みます。portable ZIP は上級者用の代替として残します。
+通常利用者は Windows Installer／Ubuntu deb から進みます。以下の portable package 配置は開発・旧版互換の説明で、v0.2.11 の一般向け配布物一覧ではありません。
 ZIP root は exe、短い README、検証 metadata/helper、非秘密の設定例、`docs/`、`licenses/` です。
 docs と performance-results は `docs/`、LICENSE/COPYRIGHT/NOTICE/CHANGES は `licenses/` に置きます。
 法的表示と対応 source の導線は残します。公開済み v0.2.10 の quickstart はその版の資料として残します。
@@ -101,7 +102,7 @@ python scripts/package-installer.py --content dist/package/content --output dist
 compiler と配布元 COPYING も個別に固定し、compilerの外部設定は読みません。これは発行者署名の代替ではありません。
 NSIS license を payload に同梱し、対応 source bundle には Installer/script を含めます。
 署名・発行者認証と公開に関する最終判断は保留です。
-push/PR workflow は contents:read で検査と artifact 作成のみです。自動 deploy/publish はありません。
+PR と手動 workflow は contents:read で検査と artifact 作成のみです。公開は別の明示操作で、自動 deploy/publish はありません。
 
 ## 受入条件と未実施の検証
 
@@ -112,8 +113,6 @@ push/PR workflow は contents:read で検査と artifact 作成のみです。�
 - Installer の新規・再実行・版更新・中断・修復・削除・変更済み wrapper・実行中ケースを隔離した Windows fixture で確認する。
 - legal/source を含む package の相対リンク、同一 commit の Windows/Linux CI、独立レビューを確認する。
 
-2026-10-21 05:35:17 UTC に性能計測の負荷保留が解除されました。
-Windows/Linux Goテスト各9パッケージとvet、Python13テスト、NSIS3.13候補コンパイルを確認しました。
-独立した静的レビューの4指摘を修正・再確認しています。
-Installer実行は実端末では行わず、隔離されたGitHub-hosted Windows runnerだけで行うfixtureを追加しています。
-exact-head CI、共通GUI、macOS/ARM、対話キャンセル/実際の版更新を含む全受入条件が揃うまで公開可能とは扱いません。
+現在の GUI・配布形式と利用手順は [GUI lifecycle](gui-lifecycle.md)、対応 source の対象と再構築は [source distribution](source-distribution.md) にまとめています。
+Installer lifecycle は隔離した GitHub-hosted Windows runner で確認し、本人端末や実資格情報による接続は確認したと扱いません。
+最終的な検証対象 commit・CI・配布物 digest は各 Release の release-provenance.json を参照してください。
