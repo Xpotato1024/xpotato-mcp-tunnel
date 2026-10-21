@@ -25,6 +25,7 @@ def assemble(content,gui,notices,output,platform):
     package=importlib.util.module_from_spec(spec);spec.loader.exec_module(package);package.verify(content)
     core_name='xpotato-tunnel.exe' if platform.startswith('windows') else 'xpotato-tunnel'
     gui_info=json.loads(subprocess.check_output([str(gui.resolve()),'--build-info'],text=True))
+    if gui_info.get('nativeFixture') is not False:raise ValueError('non-distributable GUI fixture or missing production marker')
     if gui_info['dirty'] or gui_info['commit']!=info['commit'] or gui_info['version']!=info['version'] or gui_info['coreSHA256']!=digest(content/core_name):raise ValueError('GUI/core provenance mismatch')
     if notices.stat().st_size<1000:raise ValueError('missing GUI third-party notice text')
     output.mkdir(parents=True,exist_ok=False)

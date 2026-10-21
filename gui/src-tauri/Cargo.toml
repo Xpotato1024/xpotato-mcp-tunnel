@@ -5,6 +5,10 @@ edition = "2021"
 license = "AGPL-3.0-only"
 publish = false
 
+[features]
+# Non-distributable hosted Windows harness; default production builds omit it.
+native-fixture = []
+
 [build-dependencies]
 tauri-build = "=2.7.3"
 sha2 = "=0.10.9"

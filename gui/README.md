@@ -26,4 +26,5 @@ python scripts/gui-notices.py --target TARGET_TRIPLE --output dist/gui-notices.t
 `scripts/package-gui.py` が core/GUI の commit・版・SHA 一致を確認して配布候補を作ります。
 Windows は既存 NSIS、Mac は arch 別 .app/DMG、Ubuntu 24.04 x64 は .deb です。
 CI は PR 検証と候補 artifact のみで、Release・署名・自動配布を行いません。
+Windows の native 結合試験は同じ UI/IPC/Go を使う非配布の `native-fixture` build です。昇格した hosted runner では WebView2 の環境変数 override が無視されるため、専用 build だけ API へ CDP/profile を渡します。通常版の DevTools は無効のままで、fixture の target/profile は配布対象から外し、両 packager が `nativeFixture:true` または marker 欠落を拒否します。
 実 Laptop 導入、署名資格情報の準備、OS 権限設定は開発ビルドに含めません。

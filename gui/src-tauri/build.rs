@@ -2,6 +2,12 @@ use sha2::{Digest, Sha256};
 use std::{env, fs::File, io::Read, path::PathBuf};
 
 fn main() {
+    if env::var_os("CARGO_FEATURE_NATIVE_FIXTURE").is_some() {
+        assert!(env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
+            && env::var("RUNNER_ENVIRONMENT").as_deref() == Ok("github-hosted")
+            && env::var("TARGET").is_ok_and(|target| target.contains("windows")),
+            "native fixture is only for an ephemeral hosted Windows runner");
+    }
     println!("cargo:rerun-if-env-changed=XPOTATO_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=XPOTATO_BUILD_CLEAN");
     let commit = env::var("XPOTATO_BUILD_COMMIT").unwrap_or_else(|_| "uncommitted".into());

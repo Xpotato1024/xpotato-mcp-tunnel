@@ -33,7 +33,7 @@ if (Test-Path -LiteralPath $profile) { throw 'Installer unexpectedly created run
 $gui = Join-Path $installed 'xpotato-tunnel-app.exe'
 if (Test-Path -LiteralPath $gui) {
     $guiInfo = & $gui --build-info | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0 -or $guiInfo.version -ne $Version -or $guiInfo.dirty) { throw 'GUI metadata mismatch' }
+      if ($LASTEXITCODE -ne 0 -or $guiInfo.version -ne $Version -or $guiInfo.dirty -or $guiInfo.nativeFixture -cne $false) { throw 'GUI metadata mismatch' }
     $menu = Join-Path ([Environment]::GetFolderPath('Programs')) 'Xpotato Tunnel\Xpotato Tunnel.lnk'
     $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($menu)
     if ($shortcut.TargetPath -ne $gui -or $shortcut.Arguments) { throw 'Start menu must open GUI directly' }

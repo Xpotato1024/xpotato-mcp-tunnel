@@ -85,6 +85,8 @@ jobs:
           cargo test --locked --release -j 2 --manifest-path gui/src-tauri/Cargo.toml
           cargo build --locked --release -j 2 --manifest-path gui/src-tauri/Cargo.toml
           gui/src-tauri/target/release/xpotato-tunnel-app${{ matrix.suffix }} --build-info
+          mkdir -p dist/gui-production
+          cp gui/src-tauri/target/release/xpotato-tunnel-app${{ matrix.suffix }} dist/gui-production/
       - name: GUI browser fixtures (mock backend, sandbox enabled)
         if: runner.os == 'Windows' || runner.os == 'Linux'
         shell: bash
@@ -94,12 +96,15 @@ jobs:
       - name: Native WebView and Go bridge smoke (hosted, no credentials)
         if: runner.os == 'Windows'
         shell: bash
-        run: XPOTATO_PLAYWRIGHT_MODULE="$PWD/.local/gui-tests/node_modules/playwright" node --test test/gui-native.test.cjs
+        run: |
+          # Separate target, never used by the native package or artifact glob.
+          CARGO_TARGET_DIR="$PWD/gui/src-tauri/target/native-fixture" cargo build --locked --release -j 2 --features native-fixture --manifest-path gui/src-tauri/Cargo.toml
+          XPOTATO_PLAYWRIGHT_MODULE="$PWD/.local/gui-tests/node_modules/playwright" node --test test/gui-native.test.cjs
       - name: Native review package with full license text
         shell: bash
         run: |
           python scripts/package-review.py --binary dist/xpotato-tunnel${{ matrix.suffix }} --output dist/core --platform ${{ matrix.platform }}
-          python scripts/package-gui.py --content dist/core/content --gui gui/src-tauri/target/release/xpotato-tunnel-app${{ matrix.suffix }} --notices dist/gui-notices.txt --output dist/gui --platform ${{ matrix.platform }}
+          python scripts/package-gui.py --content dist/core/content --gui dist/gui-production/xpotato-tunnel-app${{ matrix.suffix }} --notices dist/gui-notices.txt --output dist/gui --platform ${{ matrix.platform }}
       - name: Pinned GUI NSIS candidate
         if: runner.os == 'Windows'
         shell: pwsh

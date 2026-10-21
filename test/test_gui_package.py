@@ -23,7 +23,7 @@ class GUIPackageTests(unittest.TestCase):
                 root=Path(temp);binary=root/'core';binary.write_bytes(b'fixed core')
                 _,content=core.assemble(binary,root/'core-package','0.2.11','a'*40,platform,False,'native fixture')
                 app=root/'app';app.write_bytes(b'fixed GUI');notice=root/'notices';notice.write_text('license fixture\n'*100)
-                info=dict(version='0.2.11',commit='a'*40,dirty=False,coreSHA256=hashlib.sha256(binary.read_bytes()).hexdigest())
+                info=dict(version='0.2.11',commit='a'*40,dirty=False,nativeFixture=False,coreSHA256=hashlib.sha256(binary.read_bytes()).hexdigest())
                 with patch.object(gui.subprocess,'check_output',return_value=json.dumps(info)):
                     payload,metadata=gui.assemble(content,app,notice,root/'gui',platform)
                 core.verify(payload)
@@ -49,6 +49,15 @@ class GUIPackageTests(unittest.TestCase):
                     self.assertEqual(set(p.name for p in (deb/'DEBIAN').iterdir()),{'control'})
                     self.assertEqual(command.call_args.args[0][:2],['dpkg-deb','--root-owner-group'])
                 else:self.assertIsNone(artifact)
+                info['nativeFixture']=True
+                with patch.object(gui.subprocess,'check_output',return_value=json.dumps(info)),self.assertRaisesRegex(ValueError,'non-distributable'):
+                    gui.assemble(content,app,notice,root/'fixture-rejected',platform)
+                self.assertFalse((root/'fixture-rejected').exists())
+                del info['nativeFixture']
+                with patch.object(gui.subprocess,'check_output',return_value=json.dumps(info)),self.assertRaisesRegex(ValueError,'production marker'):
+                    gui.assemble(content,app,notice,root/'unmarked-rejected',platform)
+                self.assertFalse((root/'unmarked-rejected').exists())
+                info['nativeFixture']=False
                 info['coreSHA256']='0'*64
                 with patch.object(gui.subprocess,'check_output',return_value=json.dumps(info)),self.assertRaisesRegex(ValueError,'provenance'):
                     gui.assemble(content,app,notice,root/'invalid',platform)

@@ -53,6 +53,46 @@ func waitFile(t *testing.T, p string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+type unrelatedFixture struct {
+	cmd  *exec.Cmd
+	done chan struct{}
+	err  error
+}
+
+func startUnrelatedFixture(t *testing.T, exe, heartbeat string) *unrelatedFixture {
+	t.Helper()
+	cmd := exec.Command(exe, "-test.run=^TestOwnedTreeFixture$")
+	cmd.Env = append(os.Environ(), "XPOTATO_TREE_MODE=leaf", "XPOTATO_TREE_HEARTBEAT="+heartbeat)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	fixture := &unrelatedFixture{cmd: cmd, done: make(chan struct{})}
+	go func() { fixture.err = cmd.Wait(); close(fixture.done) }()
+	t.Cleanup(func() { _ = cmd.Process.Kill(); <-fixture.done })
+	waitFile(t, heartbeat)
+	return fixture
+}
+
+func (fixture *unrelatedFixture) assertAdvance(t *testing.T, path string, before []byte, deadline time.Time) {
+	t.Helper()
+	for {
+		select {
+		case <-fixture.done:
+			t.Fatalf("unrelated fixture exited during owned cleanup: %v", fixture.err)
+		default:
+		}
+		value, err := os.ReadFile(path)
+		// WriteFile can briefly truncate the heartbeat; require real content.
+		if err == nil && len(value) > 0 && string(value) != string(before) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("unrelated live fixture heartbeat did not advance before the existing cleanup deadline")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
 func TestOwnedTreeFixture(t *testing.T) {
 	mode := os.Getenv("XPOTATO_TREE_MODE")
 	if mode == "" {
@@ -97,13 +137,7 @@ func TestOwnedDescendantsReapedOnInterruptAndParentExit(t *testing.T) {
 			heartbeat := filepath.Join(root, "owned")
 			sentinel := filepath.Join(root, "unrelated")
 			exe, _ := os.Executable()
-			other := exec.Command(exe, "-test.run=^TestOwnedTreeFixture$")
-			other.Env = append(os.Environ(), "XPOTATO_TREE_MODE=leaf", "XPOTATO_TREE_HEARTBEAT="+sentinel)
-			if e := other.Start(); e != nil {
-				t.Fatal(e)
-			}
-			defer func() { other.Process.Kill(); other.Wait() }()
-			waitFile(t, sentinel)
+			other := startUnrelatedFixture(t, exe, sentinel)
 			cmd := exec.Command(exe, "-test.run=^TestOwnedTreeFixture$")
 			cmd.Env = append(os.Environ(), "XPOTATO_TREE_MODE="+mode, "XPOTATO_TREE_HEARTBEAT="+heartbeat)
 			signals := make(chan os.Signal, 1)
@@ -113,6 +147,7 @@ func TestOwnedDescendantsReapedOnInterruptAndParentExit(t *testing.T) {
 			if mode == "parent-wait" {
 				signals <- os.Interrupt
 			}
+			cleanupDeadline := time.Now().Add(10 * time.Second)
 			select {
 			case e := <-done:
 				if e != nil {
@@ -125,13 +160,10 @@ func TestOwnedDescendantsReapedOnInterruptAndParentExit(t *testing.T) {
 			otherFirst, _ := os.ReadFile(sentinel)
 			time.Sleep(150 * time.Millisecond)
 			last, _ := os.ReadFile(heartbeat)
-			otherLast, _ := os.ReadFile(sentinel)
 			if string(first) != string(last) {
 				t.Fatal("owned grandchild remained running")
 			}
-			if string(otherFirst) == string(otherLast) {
-				t.Fatal("unrelated live process was affected")
-			}
+			other.assertAdvance(t, sentinel, otherFirst, cleanupDeadline)
 		})
 	}
 }

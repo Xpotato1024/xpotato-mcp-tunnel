@@ -1,9 +1,11 @@
 // Hosted Windows integration only. No Setup, Vault, keys, runtime or user data.
-// Test-process CDP follows https://playwright.dev/docs/webview2 ; it is never
-// enabled by the packaged application. No shell, taskkill or process search.
+// Dedicated non-distributable harness: the same production code, UI and IPC,
+// with WebView API options for CDP/profile (elevated hosts ignore env flags).
+// https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags
+// Production DevTools stay disabled. No taskkill or process search.
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {spawn}=require('node:child_process');
+const {spawn,execFileSync}=require('node:child_process');
 const {once}=require('node:events');
 const fs=require('node:fs/promises');
 const path=require('node:path');
@@ -14,23 +16,31 @@ test('native WebView2, Tauri permissions and actual Go bridge hello/close', {tim
   assert.equal(process.env.GITHUB_ACTIONS,'true');
   assert.equal(process.env.RUNNER_ENVIRONMENT,'github-hosted');
   assert.equal(process.platform,'win32');
-  const executable=path.resolve('gui/src-tauri/target/release/xpotato-tunnel-app.exe');
+  const executable=path.resolve('gui/src-tauri/target/native-fixture/release/xpotato-tunnel-app.exe');
+  const info=JSON.parse(execFileSync(executable,['--build-info'],{encoding:'utf8'}));
+  assert.equal(info.nativeFixture,true,'only a marked non-distributable harness may open CDP');
+  assert.ok(info.webviewVersion,'OS WebView2 runtime missing; this fixture does not install it');
+  console.log('fixture OS WebView2:',info.webviewVersion);
+  // Exact non-secret token diagnostic; no registry/credential enumeration.
+  console.log('fixture administrator token:',execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
+    '([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'],{encoding:'utf8'}).trim());
   const profile=await fs.mkdtemp(path.join(process.env.RUNNER_TEMP,'xpotato-native-webview-'));
   const reservation=net.createServer();
   reservation.listen(0,'127.0.0.1');await once(reservation,'listening');
   const port=reservation.address().port;await new Promise(resolve=>reservation.close(resolve));
-  const child=spawn(executable,[],{shell:false,windowsHide:true,stdio:'ignore',env:{...process.env,
-    WEBVIEW2_USER_DATA_FOLDER:profile,
-    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`}});
+  const child=spawn(executable,[],{shell:false,windowsHide:true,stdio:['ignore','ignore','pipe'],env:{...process.env,
+    XPOTATO_FIXTURE_PROFILE:profile,XPOTATO_FIXTURE_PORT:String(port)}});
+  let diagnostics='',lastConnectionError='';
+  child.stderr.on('data',chunk=>{diagnostics=(diagnostics+chunk.toString()).slice(-4096);});
   const exited=new Promise((resolve,reject)=>{child.once('exit',(code)=>resolve(code));child.once('error',reject);});
   let browser;
   try {
     const deadline=Date.now()+25000;
     while(Date.now()<deadline && child.exitCode===null){
       try {browser=await chromium.connectOverCDP(`http://127.0.0.1:${port}`,{timeout:1000});break;}
-      catch {await new Promise(resolve=>setTimeout(resolve,150));}
+      catch(error) {lastConnectionError=String(error.message).slice(0,1000);await new Promise(resolve=>setTimeout(resolve,150));}
     }
-    assert.ok(browser,'isolated native WebView did not become available');
+    assert.ok(browser,`isolated native WebView unavailable; exit=${child.exitCode}; ${lastConnectionError}; ${diagnostics}`);
     const context=browser.contexts()[0];
     let page=context.pages()[0];
     if(!page)page=await context.waitForEvent('page',{timeout:5000});

@@ -192,8 +192,27 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
 fn main() {
     // Build-time packaging inquiry only; never opens a WebView, Vault or core.
     if std::env::args().skip(1).collect::<Vec<_>>() == ["--build-info"] {
-        println!("{}",json!({"version":env!("CARGO_PKG_VERSION"),"commit":env!("XPOTATO_GUI_COMMIT"),"dirty":env!("XPOTATO_GUI_CLEAN")!="1","coreSHA256":env!("XPOTATO_GUI_CORE_SHA")}));
+        #[allow(unused_mut)]
+        let mut info=json!({"version":env!("CARGO_PKG_VERSION"),"commit":env!("XPOTATO_GUI_COMMIT"),"dirty":env!("XPOTATO_GUI_CLEAN")!="1","coreSHA256":env!("XPOTATO_GUI_CORE_SHA"),"nativeFixture":cfg!(feature="native-fixture")});
+        #[cfg(feature="native-fixture")]
+        { info["webviewVersion"]=json!(tauri::webview_version().ok()); }
+        println!("{info}");
         return;
+    }
+    #[allow(unused_mut)]
+    let mut context = tauri::generate_context!();
+    // Elevated WebView2 hosts ignore environment overrides. Use API options
+    // only in a separately compiled, non-distributable CI harness. Production
+    // has no code for this branch and never reads these fixture variables.
+    #[cfg(all(windows,feature="native-fixture"))]
+    {
+        let port: u16 = std::env::var("XPOTATO_FIXTURE_PORT").expect("fixture port").parse().expect("numeric fixture port");
+        assert!(port > 0);
+        let profile = std::path::PathBuf::from(std::env::var_os("XPOTATO_FIXTURE_PROFILE").expect("fixture profile"));
+        assert!(profile.is_absolute());
+        let window = &mut context.config_mut().app.windows[0];
+        window.additional_browser_args = Some(format!("--remote-debugging-port={port} --remote-debugging-address=127.0.0.1"));
+        window.data_directory = Some(profile);
     }
     let shared = Shared::default();
     let setup_state = shared.clone();
@@ -217,8 +236,11 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![poll, operate, reply, cancel, request_close, pick_folder])
-        .run(tauri::generate_context!());
-    if result.is_err() {
+        .run(context);
+    if let Err(_error) = result {
+        eprintln!("Xpotato Tunnel could not start; check the OS WebView and application installation.");
+        #[cfg(feature="native-fixture")]
+        eprintln!("native fixture initialization: {_error:?}");
         // This path precedes any WebView UI; give a visible Windows error even
         // when the system WebView2 runtime is missing. No download/elevation.
         #[cfg(windows)] unsafe {
@@ -228,7 +250,6 @@ fn main() {
             let title:Vec<u16>="Xpotato Tunnel".encode_utf16().chain(Some(0)).collect();
             MessageBoxW(std::ptr::null_mut(),message.as_ptr(),title.as_ptr(),0x10);
         }
-        eprintln!("Xpotato Tunnel could not start; check the OS WebView and application installation.");
         std::process::exit(1);
     }
 }

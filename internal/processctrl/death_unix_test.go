@@ -39,13 +39,7 @@ func TestLauncherDeathRetainsOwnershipUntilOwnedTreeEnds(t *testing.T) {
 			sentinel := filepath.Join(root, "unrelated")
 			lock := filepath.Join(root, "tunnel.lock")
 			exe, _ := os.Executable()
-			other := exec.Command(exe, "-test.run=^TestOwnedTreeFixture$")
-			other.Env = append(os.Environ(), "XPOTATO_TREE_MODE=leaf", "XPOTATO_TREE_HEARTBEAT="+sentinel)
-			if e := other.Start(); e != nil {
-				t.Fatal(e)
-			}
-			defer func() { other.Process.Kill(); other.Wait() }()
-			waitFile(t, sentinel)
+			other := startUnrelatedFixture(t, exe, sentinel)
 			launcher := exec.Command(exe, "-test.run=^TestUnixLauncherFixture$")
 			launcher.Env = append(os.Environ(), "XPOTATO_LAUNCHER_FIXTURE=1", "XPOTATO_LAUNCHER_LOCK="+lock, "XPOTATO_TREE_HEARTBEAT="+beat)
 			if e := launcher.Start(); e != nil {
@@ -83,13 +77,10 @@ func TestLauncherDeathRetainsOwnershipUntilOwnedTreeEnds(t *testing.T) {
 			otherFirst, _ := os.ReadFile(sentinel)
 			time.Sleep(150 * time.Millisecond)
 			last, _ := os.ReadFile(beat)
-			otherLast, _ := os.ReadFile(sentinel)
 			if string(first) != string(last) {
 				t.Fatal("owned grandchild survived actual launcher death")
 			}
-			if string(otherFirst) == string(otherLast) {
-				t.Fatal("unrelated process was affected")
-			}
+			other.assertAdvance(t, sentinel, otherFirst, deadline)
 			release, e = lockfile.Acquire(lock, "synthetic-owner")
 			if e != nil {
 				t.Fatal(e)

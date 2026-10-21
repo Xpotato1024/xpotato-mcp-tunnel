@@ -2,10 +2,12 @@
 import importlib.util
 import hashlib
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("installer", ROOT / "scripts/package-installer.py")
@@ -17,6 +19,22 @@ fetch_spec.loader.exec_module(fetcher)
 
 
 class InstallerTests(unittest.TestCase):
+    def test_native_harness_cannot_enter_windows_installer(self):
+        with tempfile.TemporaryDirectory() as temp:
+            payload=Path(temp)
+            (payload/'xpotato-tunnel-app.exe').write_bytes(b'GUI fixture')
+            (payload/'xpotato-tunnel.exe').write_bytes(b'core fixture')
+            info=dict(version='0.2.11',commit='a'*40)
+            metadata=dict(**info,dirty=False,coreSHA256=installer.digest(payload/'xpotato-tunnel.exe'))
+            for marker in (True,None):
+                record=dict(metadata)
+                if marker is not None:record['nativeFixture']=marker
+                with patch.object(installer.subprocess,'check_output',return_value=json.dumps(record)),self.assertRaisesRegex(ValueError,'non-distributable'):
+                    installer.gui_defines(payload,info)
+            metadata['nativeFixture']=False
+            with patch.object(installer.subprocess,'check_output',return_value=json.dumps(metadata)):
+                self.assertEqual(installer.gui_defines(payload,info),['/DGUI_SHA='+installer.digest(payload/'xpotato-tunnel-app.exe')])
+
     def test_toolchain_digest_and_archive_traversal_fail_before_extraction(self):
         for unsafe in (False, True):
             with self.subTest(unsafe=unsafe), tempfile.TemporaryDirectory() as temp:
