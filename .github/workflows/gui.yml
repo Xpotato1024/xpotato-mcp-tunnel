@@ -59,6 +59,9 @@ jobs:
         run: |
           rustup toolchain install 1.94.1 --profile minimal
           rustup override set 1.94.1
+      - name: Locked native dependency license preflight
+        shell: bash
+        run: python scripts/gui-notices.py --target ${{ matrix.target }} --output dist/gui-notices.txt
       - name: Go lifecycle and pinned runtime smoke (no vault keys)
         run: go test -p 2 -count=1 ./...
         env:
@@ -88,10 +91,9 @@ jobs:
         run: |
           npm install --prefix .local/gui-tests --ignore-scripts --no-audit --no-fund playwright@1.58.2
           XPOTATO_PLAYWRIGHT_MODULE="$PWD/.local/gui-tests/node_modules/playwright" node --test test/gui.test.cjs
-      - name: Full license text and native review package
+      - name: Native review package with full license text
         shell: bash
         run: |
-          python scripts/gui-notices.py --target ${{ matrix.target }} --output dist/gui-notices.txt
           python scripts/package-review.py --binary dist/xpotato-tunnel${{ matrix.suffix }} --output dist/core --platform ${{ matrix.platform }}
           python scripts/package-gui.py --content dist/core/content --gui gui/src-tauri/target/release/xpotato-tunnel-app${{ matrix.suffix }} --notices dist/gui-notices.txt --output dist/gui --platform ${{ matrix.platform }}
       - name: Pinned GUI NSIS candidate
