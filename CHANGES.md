@@ -1,7 +1,19 @@
-# 0.2.11 Draft — 2026-10-21
+# 0.2.12 — 2026-10-21
 
-- Security candidate: Node 24.22.1, Go 1.27.3 and Commander 0.3.0 with Sharp
-  0.35.5. Existing running generations are not replaced automatically.
+- Update the managed Node runtime to 24.22.1 and rebuild the Go core with
+  Go 1.27.3. Update Desktop Commander to 0.3.0, Sharp to 0.35.5 and
+  markdown-it to 14.3.3, retaining upstream consumer override policy.
+- Extend Windows/Linux managed smoke coverage to actual file, image,
+  frontmatter, Excel and PDF-module/watcher paths.
+- The separately fetched OpenAI plain tunnel-client-runtime remains pinned
+  to 0.0.16. Its official executable SPDX reports Go stdlib 1.27.0; latest
+  0.0.17 also reports 1.27.0. This release does not establish that the entire
+  bundle is remediated for the CA incident/CVE-2026-111943. Existing running
+  generations are not replaced automatically.
+- Publish Windows x64 Installer, Ubuntu 24.04 desktop x64 deb and matching
+  Windows/Linux corresponding source. Mac distribution remains held.
+
+# 0.2.11 Draft — 2026-10-21
 
 - Keep the Tunnel core in Go; add a thin per-user NSIS installer candidate and
   a shared maintenance menu. No merge, release or target-device installation.
