@@ -2,6 +2,11 @@ use sha2::{Digest, Sha256};
 use std::{env, fs::File, io::Read, path::PathBuf};
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=XPOTATO_BUILD_COMMIT");
+    println!("cargo:rerun-if-env-changed=XPOTATO_BUILD_CLEAN");
+    let commit = env::var("XPOTATO_BUILD_COMMIT").unwrap_or_else(|_| "uncommitted".into());
+    println!("cargo:rustc-env=XPOTATO_GUI_COMMIT={commit}");
+    println!("cargo:rustc-env=XPOTATO_GUI_CLEAN={}",env::var("XPOTATO_BUILD_CLEAN").unwrap_or_else(|_| "0".into()));
     let target = env::var("TARGET").expect("Cargo target missing");
     let extension = if target.contains("windows") { ".exe" } else { "" };
     let backend = PathBuf::from("binaries").join(format!("xpotato-tunnel-{target}{extension}"));

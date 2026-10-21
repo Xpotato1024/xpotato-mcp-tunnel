@@ -33,17 +33,25 @@ def validate_build(build_info, commit, platform):
 
 
 def verify(content):
+    paths=list(content.rglob('*'))
+    if content.is_symlink() or any(p.is_symlink() for p in paths):
+        raise ValueError('package links are not permitted')
+    expected=set()
     for line in (content / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
         match = re.fullmatch(r"([0-9a-f]{64})  ([\w./-]+)", line)
         if not match or ".." in Path(match[2]).parts or match[2].startswith("/"):
             raise ValueError("invalid checksum entry")
+        if match[2] in expected or match[2]=='SHA256SUMS':raise ValueError('duplicate or recursive checksum entry')
+        expected.add(match[2])
         if sha256(content / match[2]) != match[1]:
             raise ValueError(f"SHA256 mismatch: {match[2]}")
+    actual={p.relative_to(content).as_posix() for p in paths if p.is_file() and p!=content/'SHA256SUMS'}
+    if expected!=actual:raise ValueError('package inventory differs from checksums')
 
 
 def assemble(binary, output, version, commit, platform, dirty, build_info,
              epoch=315532800, release=False):
-    if platform not in ("windows-amd64", "linux-amd64"):
+    if platform not in ("windows-amd64", "linux-amd64", "darwin-amd64", "darwin-arm64"):
         raise ValueError("unsupported platform")
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("invalid version")
@@ -55,7 +63,7 @@ def assemble(binary, output, version, commit, platform, dirty, build_info,
     content.mkdir()
     name = "xpotato-tunnel.exe" if platform.startswith("windows") else "xpotato-tunnel"
     shutil.copy2(binary, content / name)
-    if platform.startswith("linux"):
+    if not platform.startswith("windows"):
         (content / name).chmod(0o755)
     (content / "docs").mkdir()
     (content / "licenses").mkdir()
@@ -136,7 +144,7 @@ def assemble(binary, output, version, commit, platform, dirty, build_info,
         extracted = Path(temp)
         shutil.unpack_archive(str(archive), temp)
         verify(extracted)
-        if platform.startswith("linux") and not os.access(extracted / name, os.X_OK):
+        if not platform.startswith("windows") and not os.access(extracted / name, os.X_OK):
             raise ValueError("executable permission lost")
     return archive, content
 
@@ -149,7 +157,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--platform", choices=("windows-amd64", "linux-amd64"), required=True)
+    parser.add_argument("--platform", choices=("windows-amd64", "linux-amd64", "darwin-amd64", "darwin-arm64"), required=True)
     parser.add_argument("--release", action="store_true", help="use stable versioned asset names; no publishing")
     args = parser.parse_args()
     binary = args.binary.resolve()

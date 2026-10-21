@@ -65,7 +65,7 @@ func guiBridge(input io.Reader, output io.Writer) (int, error) {
 	}
 	return serveGUI(input, output, guiRunOperation, guiEvent{Type: "hello", Version: core.Version,
 		Home: home, Platform: runtime.GOOS + "/" + runtime.GOARCH,
-		Supported: (runtime.GOOS == "windows" || runtime.GOOS == "linux") && runtime.GOARCH == "amd64"})
+		Supported: managed.SupportedPlatform() && platform.NativeAvailable})
 }
 
 func serveGUI(input io.Reader, output io.Writer, execute guiExecute, hello guiEvent) (int, error) {

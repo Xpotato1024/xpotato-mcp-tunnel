@@ -21,7 +21,7 @@ import (
 	"syscall"
 )
 
-const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
+const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64; macOS amd64/arm64)
   setup [--env-file PATH] [--device NAME] [--tunnel-id ID] [--allow ABSOLUTE_DIR ...]
   maintenance | start | doctor [--deep] | update | repair | rollback | credentials | plugin
   package-check | uninstall-entrypoints (no credentials or runtime scan)

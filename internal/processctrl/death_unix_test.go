@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || darwin
 
 package processctrl
 
@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func TestLinuxLauncherFixture(t *testing.T) {
+func TestUnixLauncherFixture(t *testing.T) {
 	if os.Getenv("XPOTATO_LAUNCHER_FIXTURE") != "1" {
 		return
 	}
@@ -46,7 +46,7 @@ func TestLauncherDeathRetainsOwnershipUntilOwnedTreeEnds(t *testing.T) {
 			}
 			defer func() { other.Process.Kill(); other.Wait() }()
 			waitFile(t, sentinel)
-			launcher := exec.Command(exe, "-test.run=^TestLinuxLauncherFixture$")
+			launcher := exec.Command(exe, "-test.run=^TestUnixLauncherFixture$")
 			launcher.Env = append(os.Environ(), "XPOTATO_LAUNCHER_FIXTURE=1", "XPOTATO_LAUNCHER_LOCK="+lock, "XPOTATO_TREE_HEARTBEAT="+beat)
 			if e := launcher.Start(); e != nil {
 				t.Fatal(e)

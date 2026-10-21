@@ -39,15 +39,24 @@ const dependencyLockSHA = "24a35c65bbc5ba7996ed70505bc60795f44e9d29f924451da0409
 type Manifest struct{ Platform, NodeURL, NodeSHA, TunnelURL, TunnelSHA, ExecutableSHA string }
 
 func manifest() (Manifest, error) {
-	if runtime.GOARCH != "amd64" {
-		return Manifest{}, errors.New("this runtime bundle supports Windows/Linux amd64 only")
+	return manifestFor(runtime.GOOS, runtime.GOARCH)
+}
+func SupportedPlatform() bool { _, err := manifest(); return err == nil }
+func manifestFor(goos, arch string) (Manifest, error) {
+	if arch != "amd64" && !(goos == "darwin" && arch == "arm64") {
+		return Manifest{}, errors.New("unsupported runtime architecture")
 	}
 	base := "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-runtime-v0.0.16-"
-	switch runtime.GOOS {
+	switch goos {
 	case "windows":
 		return Manifest{"windows-amd64", "https://nodejs.org/dist/v24.14.0/node-v24.14.0-win-x64.zip", "313fa40c0d7b18575821de8cb17483031fe07d95de5994f6f435f3b345f85c66", base + "windows-amd64.zip", "639fdfe10d91c672d8f8a49386ebf39acaac4e560a88134735b1739a02ddb82d", "19e7970f825e0180546acba4c73ed1163a85f8d6fdd4393ff0854458a642d1b8"}, nil
 	case "linux":
 		return Manifest{"linux-amd64", "https://nodejs.org/dist/v24.14.0/node-v24.14.0-linux-x64.tar.gz", "dbf5b8665dec15e59e6359a517fefb47b23fdb9152d8def975b9bca3dfc6d355", base + "linux-amd64.zip", "f8f48017e752810c2c6f02065cdc4ca1ad045b91a6d045cbab144b957fdcbdb1", "35183d94445c4c11a9d2f2aba52d23b3581c3580bf3998226a33a904c85f37d0"}, nil
+	case "darwin":
+		if arch == "arm64" {
+			return Manifest{"darwin-arm64", "https://nodejs.org/dist/v24.14.0/node-v24.14.0-darwin-arm64.tar.gz", "a1a54f46a750d2523d628d924aab61758a51c9dad3e0238beb14141be9615dd3", base + "darwin-arm64.zip", "81d230a289ae1b1416738d8150bc879d88a29e8749bb659047a7ef90dfc4acbe", "5864074e05609e7ea5758f4fe86c0be63ac9b8aa4b49b4b9303241484102cb2f"}, nil
+		}
+		return Manifest{"darwin-amd64", "https://nodejs.org/dist/v24.14.0/node-v24.14.0-darwin-x64.tar.gz", "f2879eb810e25993a0578e5d878930266fd2eafcffe9f2839b3d8db354d4879e", base + "darwin-amd64.zip", "bfd4a63a523ef9e585bbc71d1c008d099fb7560fc419d3dbb24db6f88d3c94ee", "c907b358f6b8fca5b253cf91a0df59823c704ec760d1928fe56bb2b3e5feeb4c"}, nil
 	}
 	return Manifest{}, errors.New("unsupported OS")
 }
@@ -251,9 +260,16 @@ func extractNode(archive, root string) error {
 	return extractNodeContext(context.Background(), archive, root)
 }
 func extractNodeContext(parent context.Context, archive, root string) error {
+	return extractNodePlatform(parent, archive, root, runtime.GOOS, runtime.GOARCH)
+}
+func extractNodePlatform(parent context.Context, archive, root, goos, arch string) error {
 	ctx, cancel := context.WithTimeout(parent, fileOperationTimeout)
 	defer cancel()
-	if runtime.GOOS == "windows" {
+	m, err := manifestFor(goos, arch)
+	if err != nil {
+		return err
+	}
+	if goos == "windows" {
 		if e := extractZIPContext(ctx, archive, root); e != nil {
 			return e
 		}
@@ -270,7 +286,7 @@ func extractNodeContext(parent context.Context, archive, root string) error {
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
-	prefix := "node-v" + nodeVersion + "-linux-x64/"
+	prefix := strings.TrimSuffix(m.NodeURL[strings.LastIndex(m.NodeURL, "/")+1:], ".tar.gz") + "/"
 	for {
 		if e := ctx.Err(); e != nil {
 			return e
@@ -413,7 +429,7 @@ func (manager Manager) populateRuntime(ctx context.Context, stage string, m Mani
 	if e != nil || h != m.ExecutableSHA {
 		return errors.New("tunnel executable SHA256 mismatch")
 	}
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS != "windows" {
 		if e = os.Chmod(filepath.Join(stage, executable()), 0700); e != nil {
 			return e
 		}

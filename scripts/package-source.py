@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -21,7 +22,7 @@ def pack(content, archive, epoch):
     if any(p.is_symlink() for p in content.rglob('*')):
         raise ValueError('source bundle must contain no symlinks')
     checksums = ''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(content).as_posix()}\n'
-                        for p in files if p.name != 'SOURCE-SHA256SUMS')
+                        for p in files if p != content/'SOURCE-SHA256SUMS')
     (content/'SOURCE-SHA256SUMS').write_text(checksums, encoding='utf-8', newline='\n')
     with archive.open('xb') as raw, gzip.GzipFile(filename='',fileobj=raw,mode='wb',mtime=epoch) as compressed:
         with tarfile.open(fileobj=compressed, mode='w') as tar:
@@ -39,6 +40,7 @@ def main():
         raise SystemExit('source packaging requires Python 3.12 or later (safe tar extraction)')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--rust-vendor', type=Path, help='Reviewed cargo vendor output to include with GUI source')
     args = parser.parse_args()
     if run('git','status','--porcelain','--untracked-files=normal').strip():
         raise ValueError('commit all source changes before packaging')
@@ -58,11 +60,19 @@ def main():
             tar.extractall(content,filter='data')
         subprocess.run(['go','mod','verify'],cwd=ROOT,check=True)
         subprocess.run(['go','mod','vendor','-o',str(content/'vendor')],cwd=ROOT,check=True)
+        if args.rust_vendor:
+            rust_vendor=args.rust_vendor.resolve()
+            if not rust_vendor.is_dir() or any(p.is_symlink() for p in rust_vendor.rglob('*')):
+                raise ValueError('expected regular Cargo vendor source tree')
+            shutil.copytree(rust_vendor,content/'gui/vendor')
+            (content/'.cargo').mkdir(exist_ok=True)
+            (content/'.cargo/config.toml').write_text('[source.crates-io]\nreplace-with = "vendored-sources"\n[source.vendored-sources]\ndirectory = "gui/vendor"\n',encoding='utf-8')
         if run('git','rev-parse','HEAD').decode().strip()!=commit or run('git','status','--porcelain','--untracked-files=normal').strip():
             raise ValueError('source checkout changed while collecting dependencies')
         metadata = dict(commit=commit,version=version,license='AGPL-3.0-only',toolchain=toolchain,
                         sourceDateEpoch=epoch,goDependenciesIncluded=True,runtimeIncluded=False,
                         buildInstructions='docs/licensing.md')
+        metadata['rustDependenciesIncluded']=bool(args.rust_vendor)
         (content/'SOURCE-PROVENANCE.json').write_text(json.dumps(metadata,indent=2)+'\n',encoding='utf-8',newline='\n')
         archive = output/f'xpotato-tunnel-{version}-source.tar.gz'
         pack(content,archive,epoch)

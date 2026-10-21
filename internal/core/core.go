@@ -102,6 +102,9 @@ func DefaultHome() (string, error) {
 	if runtime.GOOS == "windows" {
 		return filepath.Join(h, "AppData", "Local", "xpotato-mcp-tunnel-v2"), nil
 	}
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(h, "Library", "Application Support", "XpotatoTunnel"), nil
+	}
 	if x := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(x) {
 		return filepath.Join(x, "xpotato-mcp-tunnel-v2"), nil
 	}

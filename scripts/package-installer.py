@@ -99,6 +99,13 @@ def main():
     with (payload / "SHA256SUMS").open("a", encoding="utf-8", newline="\n") as stream:
         stream.write(f"{digest(payload / 'licenses/NSIS-LICENSE.txt')}  licenses/NSIS-LICENSE.txt\n")
     generate_includes(payload, output)
+    gui_flags=[]
+    gui=payload/'xpotato-tunnel-app.exe'
+    if gui.exists():
+        gui_info=json.loads(subprocess.check_output([str(gui),'--build-info'],text=True))
+        if gui_info['dirty'] or gui_info['commit']!=info['commit'] or gui_info['version']!=info['version'] or gui_info['coreSHA256']!=digest(payload/'xpotato-tunnel.exe'):
+            raise ValueError('GUI/core provenance mismatch')
+        gui_flags=['/DGUI_SHA='+digest(gui)]
     script = output / "windows.nsi"
     shutil.copyfile(ROOT / "installer/windows.nsi", script)
     installer = output / f"xpotato-tunnel-{info['version']}-windows-amd64-setup.exe"
@@ -107,7 +114,7 @@ def main():
     subprocess.run([str(args.makensis.resolve()), "/NOCONFIG", "/INPUTCHARSET", "UTF8",
                     "/DVERSION=" + info["version"], "/DPAYLOAD=" + nsis_literal(payload),
                     "/DCORE_SHA=" + digest(payload / "xpotato-tunnel.exe"),
-                    "/DOUTPUT=" + nsis_literal(installer), str(script)], cwd=output, env=compiler_env, check=True)
+                    "/DOUTPUT=" + nsis_literal(installer), *gui_flags, str(script)], cwd=output, env=compiler_env, check=True)
     (output / (installer.name + ".sha256")).write_text(
         f"{digest(installer)}  {installer.name}\n", encoding="utf-8", newline="\n")
     print(installer)

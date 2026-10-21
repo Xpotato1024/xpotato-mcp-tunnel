@@ -51,14 +51,10 @@ impl Backend {
     }
 }
 
-fn start_backend(shared: Shared, app: tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    // Tauri externalBin is placed alongside the app executable on each OS.
-    // A fixed filename and embedded digest prevent PATH or user-selected code.
-    let executable = std::env::current_exe()?;
-    let base = executable.parent().ok_or("Application path unavailable")?;
-    let backend = base.join(if cfg!(windows) { "xpotato-tunnel.exe" } else { "xpotato-tunnel" });
-    if std::fs::symlink_metadata(&backend)?.file_type().is_symlink() { return Err("Backend link rejected".into()); }
-    let mut file = File::open(&backend)?;
+fn validate_backend(backend: &std::path::Path, expected: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let metadata=std::fs::symlink_metadata(backend)?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() { return Err("Backend file rejected".into()); }
+    let mut file = File::open(backend)?;
     let mut hash = Sha256::new();
     let mut buffer = [0u8; 65536];
     loop {
@@ -66,7 +62,15 @@ fn start_backend(shared: Shared, app: tauri::AppHandle) -> Result<(), Box<dyn st
         if n == 0 { break; }
         hash.update(&buffer[..n]);
     }
-    if format!("{:x}", hash.finalize()) != env!("XPOTATO_GUI_CORE_SHA") { return Err("Backend digest differs".into()); }
+    if format!("{:x}", hash.finalize()) != expected { return Err("Backend digest differs".into()); }
+    Ok(())
+}
+fn start_backend(shared: Shared, app: tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    // Fixed adjacent filename plus embedded digest: never PATH/user-selected code.
+    let executable = std::env::current_exe()?;
+    let base = executable.parent().ok_or("Application path unavailable")?;
+    let backend = base.join(if cfg!(windows) { "xpotato-tunnel.exe" } else { "xpotato-tunnel" });
+    validate_backend(&backend,env!("XPOTATO_GUI_CORE_SHA"))?;
     let mut command = Command::new(backend);
     command.arg("_gui-bridge").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
     #[cfg(windows)] {
@@ -183,6 +187,11 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     }).await.map_err(|_| "フォルダー選択を完了できません。")?
 }
 fn main() {
+    // Build-time packaging inquiry only; never opens a WebView, Vault or core.
+    if std::env::args().skip(1).collect::<Vec<_>>() == ["--build-info"] {
+        println!("{}",json!({"version":env!("CARGO_PKG_VERSION"),"commit":env!("XPOTATO_GUI_COMMIT"),"dirty":env!("XPOTATO_GUI_CLEAN")!="1","coreSHA256":env!("XPOTATO_GUI_CORE_SHA")}));
+        return;
+    }
     let shared = Shared::default();
     let setup_state = shared.clone();
     tauri::Builder::default()
@@ -207,4 +216,50 @@ fn main() {
         .invoke_handler(tauri::generate_handler![poll, operate, reply, cancel, request_close, pick_folder])
         .run(tauri::generate_context!())
         .expect("Desktop application could not start");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn sidecar_digest_rejects_tampering_before_any_execution() {
+        let path=std::env::temp_dir().join(format!("xpotato-gui-digest-{}",std::process::id()));
+        let mut file=std::fs::OpenOptions::new().write(true).create_new(true).open(&path).unwrap();
+        file.write_all(b"fixture backend").unwrap();drop(file);
+        let digest=format!("{:x}",Sha256::digest(b"fixture backend"));
+        assert!(validate_backend(&path,&digest).is_ok());
+        assert!(validate_backend(&path,&"0".repeat(64)).is_err());
+        std::fs::write(&path,b"modified").unwrap();
+        assert!(validate_backend(&path,&digest).is_err());
+        std::fs::remove_file(path).unwrap();
+    }
+    #[test]
+    fn bounded_queue_does_not_block_cancel_or_close() {
+        let (tx,rx)=sync_channel(1);
+        let mut state=Backend::default();state.input=Some(tx);
+        state.send(&json!({"type":"operation","id":"own-1"})).unwrap();
+        assert!(state.send(&json!({"type":"cancel","id":"own-1"})).is_err());
+        state.close(); // Queue is full, but priority shutdown is still visible.
+        assert!(state.shutdown.load(Ordering::Acquire));
+        assert!(state.closing);
+        assert_eq!(serde_json::from_slice::<Value>(&rx.recv().unwrap()).unwrap()["id"],"own-1");
+    }
+    #[test]
+    fn oversized_frames_and_unrelated_ids_are_rejected() {
+        let (tx,rx)=sync_channel(1);
+        let mut state=Backend::default();state.input=Some(tx);
+        assert!(state.send(&json!({"value":"x".repeat(LIMIT)})).is_err());
+        assert!(rx.try_recv().is_err());
+        assert!(!valid_id("../other"));assert!(!valid_id(""));assert!(valid_id("own-123"));
+    }
+    #[test]
+    fn slow_poll_preserves_prompt_and_terminal_events() {
+        let mut state=Backend::default();
+        for _ in 0..256 {state.push(json!({"type":"progress"}));}
+        state.push(json!({"type":"prompt","id":"own"}));
+        state.push(json!({"type":"complete","id":"own"}));
+        assert_eq!(state.events.len(),256);
+        assert!(state.events.iter().any(|e|e["type"]=="prompt"));
+        assert!(state.events.iter().any(|e|e["type"]=="complete"));
+    }
 }

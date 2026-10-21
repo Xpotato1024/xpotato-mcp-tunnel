@@ -1,6 +1,6 @@
 # xpotato-mcp-tunnel
 
-> 開発中: Installer と通常経路の全件 runtime 再走査の見直しは [設計・未検証項目](docs/installer-lifecycle.md) を参照してください。未公開 Draft であり、現在の配布は v0.2.10 のままです。
+> 未公開候補: Windows/Mac/Ubuntu 共通 GUI の [導入・更新・削除](docs/gui-lifecycle.md) と、通常経路の全件 runtime 再走査を除く [検査境界](docs/installer-lifecycle.md) を実装しています。現在の正式配布は v0.2.10 のままです。候補は Draft PR の CI artifact で確認し、署名・実機確認・公開は別途判断します。
 
 **Xpotato.net / Xpotato1024** — プロジェクト固有コードは **AGPL-3.0-only**。
 [正式全文](LICENSE)・[帰属方針](COPYRIGHT)・[対応ソースと第三者依存の条件](docs/licensing.md)。

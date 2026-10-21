@@ -1,0 +1,128 @@
+name: Desktop GUI candidates
+on:
+  pull_request:
+    branches: [main, feat/installer-lifecycle]
+permissions:
+  contents: read
+env:
+  GOMAXPROCS: '2'
+  CARGO_BUILD_JOBS: '2'
+jobs:
+  native:
+    name: GUI / ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - os: windows-2025
+            platform: windows-amd64
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
+          - os: ubuntu-24.04
+            platform: linux-amd64
+            target: x86_64-unknown-linux-gnu
+            suffix: ''
+          - os: macos-15-intel
+            platform: darwin-amd64
+            target: x86_64-apple-darwin
+            suffix: ''
+          - os: macos-15
+            platform: darwin-arm64
+            target: aarch64-apple-darwin
+            suffix: ''
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Ephemeral Linux build libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Fixed Rust toolchain (ephemeral runner only)
+        shell: bash
+        run: |
+          rustup toolchain install 1.94.1 --profile minimal
+          rustup override set 1.94.1
+      - name: Go lifecycle and pinned runtime smoke (no vault keys)
+        run: go test -p 2 -count=1 ./...
+        env:
+          XPOTATO_RUNTIME_SMOKE: '1'
+      - run: go vet -p 2 ./...
+      - name: Go race fixtures
+        if: runner.os != 'Windows'
+        run: go test -p 2 -race -count=1 ./internal/core ./internal/managed ./internal/processctrl ./cmd/xpotato-tunnel
+        env:
+          XPOTATO_RUNTIME_SMOKE: '0'
+      - run: python -m unittest discover -s test -p "test_*.py" -v
+      - name: Clean native sidecar and production GUI
+        shell: bash
+        run: |
+          mkdir -p dist
+          go build -trimpath -o dist/xpotato-tunnel${{ matrix.suffix }} ./cmd/xpotato-tunnel
+          python scripts/prepare-gui.py --core dist/xpotato-tunnel${{ matrix.suffix }} --target ${{ matrix.target }}
+      - name: Locked Rust tests and release build
+        shell: bash
+        run: |
+          cargo test --locked --release -j 2 --manifest-path gui/src-tauri/Cargo.toml
+          cargo build --locked --release -j 2 --manifest-path gui/src-tauri/Cargo.toml
+          gui/src-tauri/target/release/xpotato-tunnel-app${{ matrix.suffix }} --build-info
+      - name: GUI browser fixtures (mock backend, sandbox enabled)
+        if: runner.os == 'Windows' || runner.os == 'Linux'
+        shell: bash
+        run: |
+          npm install --prefix .local/gui-tests --ignore-scripts --no-audit --no-fund playwright@1.58.2
+          XPOTATO_PLAYWRIGHT_MODULE="$PWD/.local/gui-tests/node_modules/playwright" node --test test/gui.test.cjs
+      - name: Full license text and native review package
+        shell: bash
+        run: |
+          python scripts/gui-notices.py --target ${{ matrix.target }} --output dist/gui-notices.txt
+          python scripts/package-review.py --binary dist/xpotato-tunnel${{ matrix.suffix }} --output dist/core --platform ${{ matrix.platform }}
+          python scripts/package-gui.py --content dist/core/content --gui gui/src-tauri/target/release/xpotato-tunnel-app${{ matrix.suffix }} --notices dist/gui-notices.txt --output dist/gui --platform ${{ matrix.platform }}
+      - name: Pinned GUI NSIS candidate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python scripts/fetch-installer-tool.py --output dist/nsis-toolchain
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler acquisition failed' }
+          $pin = Get-Content installer/nsis-toolchain.json -Raw | ConvertFrom-Json
+          $tool = "dist/nsis-toolchain/nsis-$($pin.version)"
+          python scripts/package-installer.py --content dist/gui/content --output dist/installer --makensis "$tool/makensis.exe" --compiler-sha256 $pin.compilerSHA256 --nsis-license "$tool/COPYING"
+          if ($LASTEXITCODE -ne 0) { throw 'GUI installer compilation failed' }
+      - name: Isolated GUI installer lifecycle (hosted runner only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $info = Get-Content dist/gui/content/build-info.json -Raw | ConvertFrom-Json
+          ./test/installer.test.ps1 -InstallerPath "dist/installer/xpotato-tunnel-$($info.version)-windows-amd64-setup.exe" -Version $info.version
+      - name: Corresponding source including locked Rust dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cargo vendor --locked --manifest-path gui/src-tauri/Cargo.toml dist/gui-vendor > dist/vendor-config.txt
+          python scripts/package-source.py --rust-vendor dist/gui-vendor --output dist/source
+      - name: Upload candidates for review (no release, signing or deployment)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-${{ matrix.platform }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            dist/gui/*.dmg
+            dist/gui/*.deb
+            dist/gui/*.sha256
+            dist/installer/*-setup.exe
+            dist/installer/*.sha256
+            dist/source/*.tar.gz
+            dist/source/*.sha256
+          if-no-files-found: error
+          retention-days: 14

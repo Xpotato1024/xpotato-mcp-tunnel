@@ -90,3 +90,17 @@ commit を使い、同じ `-X` で
 `github.com/Xpotato1024/xpotato-mcp-tunnel/internal/licensing.SourceRepository=https://github.com/OWNER/REPO`
 も指定し、その版の source bundle を提供します。dirty / VCS不明の開発ビルドは正確な公開
 ソースを保証せず、その旨を表示します。クリーンなビルドでも URL の公開到達性は別途検証が必要です。
+
+## GUI の依存と対応 source
+
+GUI は Rust 1.94.1 と Cargo.lock に固定する。配布候補の `licenses/GUI-THIRD-PARTY-LICENSES.txt` に各 crate の完全な LICENSE/COPYING/NOTICE を含める。
+crate が本文を欠く場合だけ `gui/licenses/overrides.json` の crate 名・版・source commit・本文 SHA を照合する。selectors の MPL 本文は Mozilla 公式標準テキストを使用する。
+
+CI は `cargo vendor --locked --manifest-path gui/src-tauri/Cargo.toml dist/gui-vendor` を実行し、
+`python scripts/package-source.py --rust-vendor dist/gui-vendor --output dist/source` で Go/Rust 依存を含む対応 source を作る。
+OS WebView / SDK / Rust / Go toolchain 自体はこの source bundle に含めない。
+展開 source では前節の Go build に続き、対象 native triple の `gui/src-tauri/binaries/xpotato-tunnel-TARGET[.exe]` へ core をコピーする。
+provenance の commit を `XPOTATO_BUILD_COMMIT`、`XPOTATO_BUILD_CLEAN=1` に設定し、
+`cargo build --offline --locked --release --manifest-path gui/src-tauri/Cargo.toml` を実行する。
+同梱 .cargo/config.toml が vendored crates を使う。Mac/Linux の native prerequisites は GUI README を参照。
+利用者の秘密値やプロファイル、取得済み runtime を対応 source に含めない。
