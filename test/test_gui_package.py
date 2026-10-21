@@ -27,6 +27,8 @@ class GUIPackageTests(unittest.TestCase):
                 with patch.object(gui.subprocess,'check_output',return_value=json.dumps(info)):
                     payload,metadata=gui.assemble(content,app,notice,root/'gui',platform)
                 core.verify(payload)
+                self.assertTrue((payload/'docs/source-distribution.md').is_file())
+                self.assertIn('source-distribution.md', (payload/'docs/licensing.md').read_text(encoding='utf-8'))
                 with patch.object(gui.subprocess,'run') as command:
                     artifact=gui.native(payload,metadata,root/'gui')
                 if platform.startswith('darwin'):

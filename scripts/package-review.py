@@ -16,7 +16,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ("quickstart.md", "setup-once-core.md", "operations.md", "setup-env.md",
-        "runtime-ux.md", "performance-review.md", "distribution.md", "update-transactions.md", "licensing.md", "buffers-license-evidence.json")
+        "runtime-ux.md", "performance-review.md", "distribution.md", "update-transactions.md", "licensing.md", "source-distribution.md", "buffers-license-evidence.json")
 
 
 def sha256(path):
