@@ -63,6 +63,16 @@ type Prompt interface {
 	Key() ([]byte, error)
 	Consent(string) (bool, error)
 }
+
+// Native frontends render finite choices as buttons; terminals keep their
+// existing text interaction. This does not grant consent automatically.
+type PromptChoice struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+type ChoicePrompt interface {
+	Choose(string, []PromptChoice) (string, error)
+}
 type Runtime interface {
 	Install(string) (string, error)
 	Verify(string, string) error

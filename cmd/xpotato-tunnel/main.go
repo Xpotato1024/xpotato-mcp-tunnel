@@ -180,6 +180,9 @@ func parse(args []string) (string, core.Options, error) {
 	return command, o, nil
 }
 func run(args []string) (int, error) {
+	if len(args) == 1 && args[0] == "_gui-bridge" {
+		return guiBridge(os.Stdin, os.Stdout)
+	}
 	if len(args) > 0 && args[0] == "_dispatch" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()

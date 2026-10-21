@@ -115,6 +115,10 @@ type Manager struct {
 	ActivityColor    bool
 	Diagnostics      bool
 	ForceRepair      bool
+	// GUI bridge pipes must never become runtime stdin/log channels.
+	Input       io.Reader
+	Log         io.Writer
+	HideWindows bool
 }
 
 func (m Manager) stage(label string, work func() error) error {
@@ -436,6 +440,9 @@ func (manager Manager) populateRuntime(ctx context.Context, stage string, m Mani
 	npmCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	cmd := exec.Command(node, npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--bin-links=false")
+	if manager.HideWindows {
+		processctrl.HideWindow(cmd)
+	}
 	cmd.Dir = stage
 	// Own cache; no inherited authentication configuration or npm config files.
 	cache := filepath.Join(stage, ".npm-cache")
@@ -680,16 +687,26 @@ func (manager Manager) Run(home string, d core.Device, key []byte) (int, error) 
 	}
 	args := runtimeArguments(d, run, command, manager.Diagnostics)
 	cmd := exec.Command(filepath.Join(dir, executable()), args...)
+	if manager.HideWindows {
+		processctrl.HideWindow(cmd)
+	}
 	// After the leader exits, a descendant must not hold the log drain open
 	// forever and prevent the existing owned-tree cleanup path from running.
 	cmd.WaitDelay = time.Second
 	cmd.Dir = run
 	cmd.Env = runtimeEnvironment(os.Environ(), run, profile, filepath.Join(dir, "node_modules", "@wonderwhy-er", "desktop-commander", "dist", "index.js"), key)
-	childLog := display.NewChild(os.Stderr, manager.ActivityColor, key)
+	logOutput := manager.Log
+	if logOutput == nil {
+		logOutput = os.Stderr
+	}
+	childLog := display.NewChild(logOutput, manager.ActivityColor, key)
 	defer childLog.Close()
 	// Structured tunnel-runtime logs use stdout; MCP stdio is a separate pipe
 	// owned by that runtime. Sanitize both runtime log streams on parent stderr.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, childLog, childLog
+	if manager.Input != nil {
+		cmd.Stdin = manager.Input
+	}
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(interrupt)

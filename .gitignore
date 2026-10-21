@@ -15,3 +15,7 @@ credentials*
 /xpotato-tunnel.exe
 /dist/
 __pycache__/
+/gui/src-tauri/target/
+/gui/src-tauri/binaries/*
+!/gui/src-tauri/binaries/.gitkeep
+/gui/src-tauri/gen/
