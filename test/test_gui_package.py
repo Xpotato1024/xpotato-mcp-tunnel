@@ -34,6 +34,7 @@ class GUIPackageTests(unittest.TestCase):
                     plist=plistlib.loads((bundle/'Info.plist').read_bytes())
                     core.verify(bundle)
                     self.assertEqual(plist['CFBundleExecutable'],'xpotato-tunnel-app')
+                    self.assertEqual(plist['LSMinimumSystemVersion'],'13.5')
                     self.assertEqual((bundle/'MacOS/xpotato-tunnel').read_bytes(),b'fixed core')
                     self.assertTrue((bundle/'Resources/licenses/GUI-THIRD-PARTY-LICENSES.txt').is_file())
                     self.assertEqual(command.call_args.args[0][:2],['hdiutil','create'])

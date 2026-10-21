@@ -4,9 +4,13 @@ on:
     branches: [main, feat/installer-lifecycle]
 permissions:
   contents: read
+concurrency:
+  group: desktop-gui-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 env:
   GOMAXPROCS: '2'
   CARGO_BUILD_JOBS: '2'
+  MACOSX_DEPLOYMENT_TARGET: '13.5'
 jobs:
   native:
     name: GUI / ${{ matrix.platform }}

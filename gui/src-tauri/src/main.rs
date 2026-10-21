@@ -36,7 +36,7 @@ impl Backend {
         // Preserve prompts and terminal states when a background window polls
         // slowly; coalesce old progress before accepting another heartbeat.
         if self.events.len() >= 256 {
-            if let Some(index) = self.events.iter().position(|item| item["type"] == "progress") {
+            if let Some(index) = self.events.iter().position(|item| item["type"] == "progress" || item["type"] == "working") {
                 self.events.remove(index);
             } else { return; }
         }
@@ -164,7 +164,10 @@ fn reply(id: String, prompt: u64, mut value: String, state: State<'_, Shared>) -
     value.zeroize();
     let mut message = json!({"type":"reply","id":id,"prompt":prompt,"value":bytes});
     bytes.zeroize();
-    let result = state.lock().map_err(|_| "内部状態を確認できません。")?.send(&message);
+    let result = match state.lock() {
+        Ok(mut state) => state.send(&message),
+        Err(_) => Err("内部状態を確認できません。".into()),
+    };
     if let Some(array) = message["value"].as_array_mut() { for item in array { *item = json!(0); } }
     result
 }
@@ -194,7 +197,7 @@ fn main() {
     }
     let shared = Shared::default();
     let setup_state = shared.clone();
-    tauri::Builder::default()
+    let result=tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(shared)
         .setup(move |app| {
@@ -214,8 +217,20 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![poll, operate, reply, cancel, request_close, pick_folder])
-        .run(tauri::generate_context!())
-        .expect("Desktop application could not start");
+        .run(tauri::generate_context!());
+    if result.is_err() {
+        // This path precedes any WebView UI; give a visible Windows error even
+        // when the system WebView2 runtime is missing. No download/elevation.
+        #[cfg(windows)] unsafe {
+            #[link(name="user32")]
+            extern "system" {fn MessageBoxW(window:*mut std::ffi::c_void,text:*const u16,title:*const u16,flags:u32)->i32;}
+            let message:Vec<u16>="アプリを起動できません。Windows の WebView2 Evergreen が利用可能か、正規 Installer で配置した版か確認してください。OS の設定変更や自動ダウンロードは行っていません。".encode_utf16().chain(Some(0)).collect();
+            let title:Vec<u16>="Xpotato Tunnel".encode_utf16().chain(Some(0)).collect();
+            MessageBoxW(std::ptr::null_mut(),message.as_ptr(),title.as_ptr(),0x10);
+        }
+        eprintln!("Xpotato Tunnel could not start; check the OS WebView and application installation.");
+        std::process::exit(1);
+    }
 }
 
 #[cfg(test)]
@@ -255,7 +270,7 @@ mod tests {
     #[test]
     fn slow_poll_preserves_prompt_and_terminal_events() {
         let mut state=Backend::default();
-        for _ in 0..256 {state.push(json!({"type":"progress"}));}
+        for _ in 0..256 {state.push(json!({"type":"working"}));}
         state.push(json!({"type":"prompt","id":"own"}));
         state.push(json!({"type":"complete","id":"own"}));
         assert_eq!(state.events.len(),256);

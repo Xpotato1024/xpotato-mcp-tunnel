@@ -53,7 +53,7 @@ def native(payload,info,output):
             if path.is_dir():shutil.copytree(path,resources/path.name)
             else:shutil.copy2(path,resources/path.name)
         shutil.copy2(ROOT/'gui/src-tauri/icons/icon.icns',resources/'icon.icns')
-        (app/'Contents/Info.plist').write_bytes(plistlib.dumps(dict(CFBundleName='Xpotato Tunnel',CFBundleDisplayName='Xpotato Tunnel',CFBundleIdentifier='net.xpotato.tunnel',CFBundleExecutable='xpotato-tunnel-app',CFBundlePackageType='APPL',CFBundleShortVersionString=version,CFBundleVersion=version,CFBundleIconFile='icon.icns',LSMinimumSystemVersion='12.0',NSHighResolutionCapable=True)))
+        (app/'Contents/Info.plist').write_bytes(plistlib.dumps(dict(CFBundleName='Xpotato Tunnel',CFBundleDisplayName='Xpotato Tunnel',CFBundleIdentifier='net.xpotato.tunnel',CFBundleExecutable='xpotato-tunnel-app',CFBundlePackageType='APPL',CFBundleShortVersionString=version,CFBundleVersion=version,CFBundleIconFile='icon.icns',LSMinimumSystemVersion='13.5',NSHighResolutionCapable=True)))
         contents=app/'Contents'
         (contents/'SHA256SUMS').write_text(''.join(f'{digest(p)}  {p.relative_to(contents).as_posix()}\n' for p in sorted(contents.rglob('*')) if p.is_file()),encoding='utf-8',newline='\n')
         spec=importlib.util.spec_from_file_location('package_review',ROOT/'scripts/package-review.py')

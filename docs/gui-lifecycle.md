@@ -66,4 +66,5 @@ Tauri の採用は共通 UI の保守を１か所にするためで、Tunnel の
 - Ubuntu 24.04 x64: .deb を OS のパッケージ管理画面で開き導入する。アプリ一覧から Xpotato Tunnel を開く。次版の .deb で更新し、パッケージ管理画面から削除する。
 
 Windows は OS 提供 WebView2 Evergreen、Ubuntu は WebKitGTK 4.1、macOS は OS WebKit を使う。WebView2 がない端末では自動導入せず OS の正規導入を案内する。
+Mac の最低版は固定 [Node 24.14.0 の要件](https://github.com/nodejs/node/blob/v24.14.0/BUILDING.md#platform-list)に合わせ 13.5 とする。CI は macOS 15 の両 CPU を検証し、13.5 実機での動作まで証明するものではない。
 アプリの「この版で更新」は同梱 core に固定された runtime を次の接続へ適用する。別の版を勝手に取得する自動更新器は設けない。
