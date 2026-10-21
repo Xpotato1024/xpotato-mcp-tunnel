@@ -45,7 +45,7 @@ test('native WebView2, Tauri permissions and actual Go bridge hello/close', {tim
     let page=context.pages()[0];
     if(!page)page=await context.waitForEvent('page',{timeout:5000});
     await page.waitForFunction(()=>document.getElementById('version')?.textContent.includes('windows/amd64'),null,{timeout:10000});
-    assert.match(await page.locator('#version').innerText(),/0\.2\.11/);
+    assert.match(await page.locator('#version').innerText(),/0\.2\.12/);
     assert.equal(await page.locator('[data-action=setup]').isEnabled(),true);
     // A cancellation with no owned matching ID is an intentional no-op.
     await page.evaluate(()=>window.__TAURI__.core.invoke('cancel',{id:'fixture-no-such-owned-operation'}));
