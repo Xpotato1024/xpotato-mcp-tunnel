@@ -34,7 +34,7 @@ var assets embed.FS
 const nodeVersion = "24.22.1"
 const commanderVersion = "0.3.0"
 const tunnelVersion = "0.0.16"
-const dependencyLockSHA = "93a8d74e55dc343752a47cac8e8199c9b4bdd12e9bfe5b966a39f10571d2b4df"
+const dependencyLockSHA = "ab831afcf75cbbc4193075599ad69429ae4fe42c12db28c4d3e424f36e77e825"
 
 type Manifest struct{ Platform, NodeURL, NodeSHA, TunnelURL, TunnelSHA, ExecutableSHA string }
 
@@ -442,7 +442,7 @@ func (manager Manager) populateRuntime(ctx context.Context, stage string, m Mani
 		return e
 	}
 	os.Remove(archive)
-	if e = os.WriteFile(filepath.Join(stage, "package.json"), []byte(`{"private":true,"name":"xpotato-managed-runtime","version":"1.0.0","dependencies":{"@wonderwhy-er/desktop-commander":"0.3.0"}}`), 0600); e != nil {
+	if e = os.WriteFile(filepath.Join(stage, "package.json"), []byte(`{"private":true,"name":"xpotato-managed-runtime","version":"1.0.0","dependencies":{"@wonderwhy-er/desktop-commander":"0.3.0"},"overrides":{"exceljs":{"uuid":"^11.1.1"},"argparse":"^2.0.1","md-to-pdf":{"chokidar":"^4.0.3"},"proxy-addr":"^2.0.8"}}`), 0600); e != nil {
 		return e
 	}
 	dependencyLock, _ := assets.ReadFile("assets/package-lock.json")

@@ -149,11 +149,17 @@ func TestManagedInstallSmoke(t *testing.T) {
 	if e = rgProbe.Run(); e != nil {
 		t.Fatal("locked package ripgrep binary unavailable")
 	}
-	sharpProbe := exec.Command(node, "--input-type=module", "-e", `import {createRequire} from 'node:module'; const require=createRequire(process.cwd()+'/node_modules/@wonderwhy-er/desktop-commander/dist/index.js'); const sharp=require('sharp'); if(sharp.versions.sharp!=='0.35.5') throw Error('patched Sharp missing'); const input=await sharp({create:{width:2,height:1,channels:4,background:{r:255,g:0,b:0,alpha:1}}}).png().toBuffer(); const output=await sharp(input).resize(1,1).webp().toBuffer(); const metadata=await sharp(output).metadata(); if(metadata.width!==1||metadata.height!==1||metadata.format!=='webp') throw Error('Sharp native processing failed');`)
+	sharpProbe := exec.CommandContext(ctx, node, "--input-type=module", "-e", `import {createRequire} from 'node:module'; const require=createRequire(process.cwd()+'/node_modules/@wonderwhy-er/desktop-commander/dist/index.js'); const sharp=require('sharp'); if(sharp.versions.sharp!=='0.35.5') throw Error('patched Sharp missing'); const input=await sharp({create:{width:2,height:1,channels:4,background:{r:255,g:0,b:0,alpha:1}}}).png().toBuffer(); const output=await sharp(input).resize(1,1).webp().toBuffer(); const metadata=await sharp(output).metadata(); if(metadata.width!==1||metadata.height!==1||metadata.format!=='webp') throw Error('Sharp native processing failed');`)
 	sharpProbe.Dir = dir
 	sharpProbe.Env = append(cleanEnv(os.Environ(), "PATH", "NODE_OPTIONS", "NODE_PATH", "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY"), "PATH=")
 	if e = sharpProbe.Run(); e != nil {
 		t.Fatal("patched Sharp native image processing failed")
+	}
+	dependencyProbe := exec.CommandContext(ctx, node, "--input-type=module", "-e", `import {createRequire} from 'node:module'; const require=createRequire(process.cwd()+'/node_modules/@wonderwhy-er/desktop-commander/dist/index.js'); const matter=require('gray-matter'); if(matter('---\nvalue: fixture\n---\nbody').data.value!=='fixture') throw Error('YAML compatibility failed'); const ExcelJS=require('exceljs'); const book=new ExcelJS.Workbook(); book.addWorksheet('fixture').getCell('A1').value='security'; const bytes=await book.xlsx.writeBuffer(); const restored=new ExcelJS.Workbook(); await restored.xlsx.load(bytes); if(restored.getWorksheet('fixture').getCell('A1').value!=='security') throw Error('Excel compatibility failed'); const {createRequire:from}=require('node:module'); const mdRequire=from(require.resolve('md-to-pdf')); if(typeof mdRequire('chokidar').watch!=='function'||typeof require('md-to-pdf').mdToPdf!=='function') throw Error('PDF dependency loading failed');`)
+	dependencyProbe.Dir = dir
+	dependencyProbe.Env = append(cleanEnv(os.Environ(), "PATH", "NODE_OPTIONS", "NODE_PATH", "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY"), "PATH=")
+	if e = dependencyProbe.Run(); e != nil {
+		t.Fatal("upstream dependency overrides failed YAML/Excel/PDF compatibility")
 	}
 	search := request(3, "tools/call", map[string]any{"name": "start_search", "arguments": map[string]any{"path": searchRoot, "pattern": "fixture_unique_search_7d19", "searchType": "content", "literalSearch": true, "maxResults": 10, "timeout_ms": 5000}})
 	var toolResult struct {
