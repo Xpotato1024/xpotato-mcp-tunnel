@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+sys.dont_write_bytecode = True # Dynamic imports must not write into the source snapshot.
 import tarfile
 import tempfile
 
@@ -20,6 +21,8 @@ def run(*args):
 
 def pack(content, archive, epoch):
     content=long_path(content)
+    if any((content/'scripts').rglob('__pycache__')):
+        raise ValueError('generated script bytecode must not enter corresponding source')
     files = sorted(p for p in content.rglob('*') if p.is_file())
     if any(p.is_symlink() for p in content.rglob('*')):
         raise ValueError('source bundle must contain no symlinks')

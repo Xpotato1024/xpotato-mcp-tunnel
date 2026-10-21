@@ -104,12 +104,22 @@ class SourcePolicyTests(unittest.TestCase):
     def test_rebuild_entry_does_not_mutate_its_source_inventory(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);content=root/'source';scripts=content/'scripts';scripts.mkdir(parents=True)
-            for name in ('rebuild-source.py','source_policy.py'):
+            for name in ('rebuild-source.py','package-source.py','source_policy.py'):
                 shutil.copy2(ROOT/'scripts'/name,scripts/name)
+            (content/'packaging').mkdir()
+            shutil.copy2(ROOT/'packaging/source-profiles.json',content/'packaging/source-profiles.json')
             source.pack(content,root/'fixture.tar.gz',1792392030)
             env=dict(os.environ);env.pop('PYTHONDONTWRITEBYTECODE',None)
-            subprocess.run([sys.executable,str(scripts/'rebuild-source.py'),'--help'],env=env,check=True,stdout=subprocess.DEVNULL)
+            for entry in ('rebuild-source.py','package-source.py'):
+                subprocess.run([sys.executable,str(scripts/entry),'--help'],env=env,check=True,stdout=subprocess.DEVNULL)
             rebuild.verify_source(content)
+
+    def test_source_pack_refuses_generated_script_bytecode(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);cache=root/'source/scripts/__pycache__';cache.mkdir(parents=True)
+            (cache/'module.pyc').write_bytes(b'temporary build path')
+            with self.assertRaisesRegex(ValueError,'bytecode'):
+                source.pack(root/'source',root/'fixture.tar.gz',1792392030)
 
     @unittest.skipUnless(os.name=='nt','explicit Windows file API path form')
     def test_long_paths_are_included_without_changing_os_policy(self):
