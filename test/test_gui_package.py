@@ -30,7 +30,7 @@ class GUIPackageTests(unittest.TestCase):
                 with patch.object(gui.subprocess,'run') as command:
                     artifact=gui.native(payload,metadata,root/'gui')
                 if platform.startswith('darwin'):
-                    bundle=root/'gui/Xpotato Tunnel.app/Contents'
+                    bundle=root/'gui/dmg-root/Xpotato Tunnel.app/Contents'
                     plist=plistlib.loads((bundle/'Info.plist').read_bytes())
                     core.verify(bundle)
                     self.assertEqual(plist['CFBundleExecutable'],'xpotato-tunnel-app')
@@ -38,6 +38,9 @@ class GUIPackageTests(unittest.TestCase):
                     self.assertEqual((bundle/'MacOS/xpotato-tunnel').read_bytes(),b'fixed core')
                     self.assertTrue((bundle/'Resources/licenses/GUI-THIRD-PARTY-LICENSES.txt').is_file())
                     self.assertEqual(command.call_args.args[0][:2],['hdiutil','create'])
+                    arguments=command.call_args.args[0]
+                    image_root=Path(arguments[arguments.index('-srcfolder')+1])
+                    self.assertEqual([p.name for p in image_root.iterdir()],['Xpotato Tunnel.app'])
                     self.assertEqual(artifact.suffix,'.dmg')
                 elif platform=='linux-amd64':
                     deb=root/'gui/deb-root'
@@ -67,5 +70,16 @@ class GUIPackageTests(unittest.TestCase):
             self.assertIn('Mozilla Public License',notices.override_text(package,directory))
             vcs.write_text(json.dumps({'git':{'sha1':'0'*40}}))
             with self.assertRaisesRegex(ValueError,'source differs'):notices.override_text(package,directory)
+
+    def test_selected_mit_keeps_upstream_declaration_and_standard_text(self):
+        record=json.loads((ROOT/'gui/licenses/overrides.json').read_text())['objc2-web-kit@0.3.2']
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp)
+            (directory/'.cargo_vcs_info.json').write_text(json.dumps({'git':{'sha1':record['commit']}}))
+            text=notices.override_text(dict(name='objc2-web-kit',version='0.3.2',license=record['license']),directory)
+            self.assertIn('Selected license: MIT',text)
+            self.assertIn('derived from Apple SDKs',text)
+            self.assertIn('Permission is hereby granted',text)
+            self.assertIn('<copyright holders>',text) # Preserve template; never invent attribution.
 
 if __name__=='__main__':unittest.main()

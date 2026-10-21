@@ -17,6 +17,9 @@ def override_text(package, directory):
     if record['license']!=package['license'] or record['commit']!=vcs['git']['sha1']:
         raise ValueError('license override source differs')
     texts=[]
+    if record.get('selectedLicense'):
+        if record['selectedLicense'] not in record['license'].split(' OR '):raise ValueError('invalid selected license')
+        texts.append('Selected license: '+record['selectedLicense']+'\n'+record.get('notes',''))
     for entry in record['files']:
         path=base/entry['path']
         if path.parent!=base or path.is_symlink() or not path.is_file():raise ValueError('invalid override path')
@@ -43,6 +46,7 @@ def collect(metadata):
             extra=override_text(package,directory)
             if not extra:missing.append(package['name']+'@'+package['version']);continue
         sections.append(f"\n--- {package['name']} {package['version']} ---\nSPDX: {package.get('license')}\nSource: {package.get('repository') or package.get('source')}\n")
+        sections.append('Package authors (Cargo metadata): '+', '.join(package.get('authors',[]))+'\n')
         if extra:sections.append(extra)
         for path in sorted(files):
             if path.stat().st_size>1024*1024:raise ValueError('unexpected license size')

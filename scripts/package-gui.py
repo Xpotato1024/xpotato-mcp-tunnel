@@ -44,7 +44,10 @@ def native(payload,info,output):
     platform=info['platform'];version=info['version']
     if not re.fullmatch(r'\d+\.\d+\.\d+',version):raise ValueError('invalid version')
     if platform.startswith('darwin'):
-        app=output/'Xpotato Tunnel.app';mac=app/'Contents/MacOS';resources=app/'Contents/Resources'
+        # Use an explicit image root so the mounted volume contains the .app,
+        # rather than depending on how a tool treats a bundle as srcfolder.
+        image_root=output/'dmg-root'
+        app=image_root/'Xpotato Tunnel.app';mac=app/'Contents/MacOS';resources=app/'Contents/Resources'
         mac.mkdir(parents=True);resources.mkdir()
         for name in ('xpotato-tunnel-app','xpotato-tunnel'):
             shutil.copy2(payload/name,mac/name);(mac/name).chmod(0o755)
@@ -60,7 +63,7 @@ def native(payload,info,output):
         package=importlib.util.module_from_spec(spec);spec.loader.exec_module(package);package.verify(contents)
         image=output/f'xpotato-tunnel-{version}-{platform}.dmg'
         # A fresh image only. No mount, Gatekeeper bypass, key or signing setup.
-        subprocess.run(['hdiutil','create','-volname','Xpotato Tunnel','-srcfolder',str(app),'-format','UDZO',str(image)],check=True)
+        subprocess.run(['hdiutil','create','-volname','Xpotato Tunnel','-srcfolder',str(image_root),'-format','UDZO',str(image)],check=True)
         return image
     if platform=='linux-amd64':
         root=output/'deb-root';app=root/'usr/lib/xpotato-tunnel'
