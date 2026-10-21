@@ -1,6 +1,6 @@
 module github.com/Xpotato1024/xpotato-mcp-tunnel
 
-go 1.27.0
+go 1.27.3
 
 require (
 	github.com/godbus/dbus/v5 v5.2.2

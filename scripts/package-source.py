@@ -56,8 +56,8 @@ def main():
     epoch = int(run('git','show','-s','--format=%ct','HEAD'))
     version = re.search(r'const Version = "([^"]+)"',(ROOT/'internal/core/core.go').read_text(encoding='utf-8'))[1]
     toolchain = run('go','version').decode().strip()
-    if not re.search(r'\bgo1\.27\.2\b',toolchain):
-        raise ValueError('use the reviewed Go 1.27.2 toolchain')
+    if not re.search(r'\bgo1\.27\.3\b',toolchain):
+        raise ValueError('use the reviewed Go 1.27.3 toolchain')
     output = args.output.resolve()
     output.mkdir(parents=True,exist_ok=False)
     with tempfile.TemporaryDirectory(prefix='xpotato-source-') as temp:

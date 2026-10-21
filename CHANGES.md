@@ -1,5 +1,8 @@
 # 0.2.11 Draft — 2026-10-21
 
+- Security candidate: Node 24.22.1, Go 1.27.3 and Commander 0.3.0 with Sharp
+  0.35.5. Existing running generations are not replaced automatically.
+
 - Keep the Tunnel core in Go; add a thin per-user NSIS installer candidate and
   a shared maintenance menu. No merge, release or target-device installation.
 - Normal new install, update, repair and start check only bounded launch files.
