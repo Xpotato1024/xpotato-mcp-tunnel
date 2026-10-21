@@ -14,7 +14,7 @@ func TestStartProgressOmitsSecretsAndNeverClaimsConnection(t *testing.T) {
 		t.Fatal(code, err)
 	}
 	joined := strings.Join(messages, "\n")
-	for _, required := range []string{"保存設定", "整合性", "二重起動", "資格情報ストア", "保存済み資格情報", "子プロセスを準備"} {
+	for _, required := range []string{"保存設定", "起動入口", "二重起動", "資格情報ストア", "保存済み資格情報", "子プロセスを準備"} {
 		if !strings.Contains(joined, required) {
 			t.Fatal("stage missing", required)
 		}
@@ -37,7 +37,7 @@ func TestStartProgressFailureIdentifiesStageBeforeKeyLoad(t *testing.T) {
 	if f.v.loads != 0 || f.r.runs != 0 {
 		t.Fatal("failed integrity allowed credential load or launch")
 	}
-	if len(messages) == 0 || !strings.Contains(messages[len(messages)-1], "整合性") || !strings.Contains(messages[len(messages)-1], "失敗") {
+	if len(messages) == 0 || !strings.Contains(messages[len(messages)-1], "起動入口") || !strings.Contains(messages[len(messages)-1], "失敗") {
 		t.Fatal(messages)
 	}
 }

@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-const Version = "0.2.10"
+const Version = "0.2.11"
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 var tunnelPattern = regexp.MustCompile(`^tunnel_[a-zA-Z0-9_-]+$`)
@@ -42,6 +42,7 @@ type Device struct {
 	MCPURL             string   `json:"mcpUrl,omitempty"`
 }
 type Options struct {
+	Deep                                     bool
 	ActivityDetails                          bool
 	Diagnostics                              bool
 	EnvFile                                  string
@@ -520,7 +521,7 @@ func (a App) Start(o Options) (code int, err error) {
 	if !d.ConfigReady || !d.CredentialReady {
 		return 1, errors.New("setup incomplete; run setup")
 	}
-	report("固定 runtime の整合性を確認")
+	report("起動入口・構成を確認（全依存の診断なし）")
 	if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
 		return 1, e
 	}
@@ -607,13 +608,26 @@ func (a App) Doctor(o Options) (map[string]any, error) {
 		return nil, e
 	}
 	integrity := "not-installed"
+	scope := "launch-files-only"
+	if o.Deep {
+		scope = "deep-runtime"
+	}
 	if d.Release != "" {
 		integrity = "ok"
-		if e = a.Runtime.Verify(o.Home, d.Release); e != nil {
+		if o.Deep {
+			if deep, ok := a.Runtime.(interface{ DeepVerify(string, string) error }); ok {
+				e = deep.DeepVerify(o.Home, d.Release)
+			} else {
+				e = errors.New("deep diagnosis unsupported by runtime provider")
+			}
+		} else {
+			e = a.Runtime.Verify(o.Home, d.Release)
+		}
+		if e != nil {
 			integrity = "failed"
 		}
 	}
-	return map[string]any{"integrity": integrity, "credentials": "not-read", "connection": "not-probed", "credentialConfigured": d.CredentialReady, "pluginAccountRegistration": "not-probed", "release": d.Release, "locks": map[string]bool{"start": busy(filepath.Join(directory(o), "start.lock")), "maintenance": busy(filepath.Join(directory(o), "maintenance.lock")), "tunnel": busy(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock")), "install": busy(filepath.Join(o.Home, "releases", "install.lock"))}}, nil
+	return map[string]any{"integrity": integrity, "verificationScope": scope, "diagnosticError": e != nil, "credentials": "not-read", "connection": "not-probed", "credentialConfigured": d.CredentialReady, "pluginAccountRegistration": "not-probed", "release": d.Release, "locks": map[string]bool{"start": busy(filepath.Join(directory(o), "start.lock")), "maintenance": busy(filepath.Join(directory(o), "maintenance.lock")), "tunnel": busy(filepath.Join(o.Home, "tunnel-locks", digest(d.Tunnel)+".lock")), "install": busy(filepath.Join(o.Home, "releases", "install.lock"))}}, e
 }
 func (a App) DoctorHome(home string) (map[string]any, error) {
 	if _, e := a.identity(); e != nil {

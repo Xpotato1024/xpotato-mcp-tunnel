@@ -23,7 +23,8 @@ import (
 
 const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
   setup [--env-file PATH] [--device NAME] [--tunnel-id ID] [--allow ABSOLUTE_DIR ...]
-  start | doctor | update | rollback | credentials | plugin
+  maintenance | start | doctor [--deep] | update | repair | rollback | credentials | plugin
+  package-check | uninstall-entrypoints (no credentials or runtime scan)
   version | about | license | source (no setup or credentials required)
   --home ABSOLUTE_DIR  (all commands)
   --device NAME       (omit to use setup's default device)
@@ -107,10 +108,10 @@ func parse(args []string) (string, core.Options, error) {
 	if command == "help" || (len(args) > 0 && (args[0] == "--help" || args[0] == "-h")) {
 		return "help", core.Options{}, nil
 	}
-	if command == "version" || command == "about" || command == "license" || command == "source" {
+	if command == "version" || command == "about" || command == "license" || command == "source" || command == "package-check" {
 		return command, core.Options{}, nil
 	}
-	if !strings.Contains("|setup|start|doctor|update|rollback|credentials|plugin|", "|"+command+"|") {
+	if !strings.Contains("|maintenance|uninstall-entrypoints|setup|start|doctor|update|repair|rollback|credentials|plugin|", "|"+command+"|") {
 		return "", core.Options{}, errors.New("unknown command; use help")
 	}
 	o := core.Options{}
@@ -124,12 +125,16 @@ func parse(args []string) (string, core.Options, error) {
 	f.StringVar(&o.CommandDir, "command-dir", "", "short command directory")
 	f.BoolVar(&o.ActivityDetails, "activity-details", false, "explicit tool argument display")
 	f.BoolVar(&o.Diagnostics, "diagnostics", false, "explicit internal diagnostic logs")
+	f.BoolVar(&o.Deep, "deep", false, "explicit full runtime diagnosis; may download a reference")
 	var allow repeated
 	f.Var(&allow, "allow", "root")
 	if e := f.Parse(args); e != nil || f.NArg() != 0 {
 		return "", o, errors.New("invalid options; use help (keys are accepted only by hidden terminal input)")
 	}
 	o.Allow = allow
+	if o.Deep && command != "doctor" {
+		return "", o, errors.New("--deep is doctor-only")
+	}
 	if o.ActivityDetails && command != "start" {
 		return "", o, errors.New("--activity-details is start-only")
 	}
@@ -165,7 +170,7 @@ func parse(args []string) (string, core.Options, error) {
 			return "", o, e
 		}
 	}
-	if command != "setup" && !(command == "doctor" && o.Device == "") {
+	if command != "setup" && command != "maintenance" && command != "uninstall-entrypoints" && !(command == "doctor" && o.Device == "" && !o.Deep) {
 		var e error
 		o, e = core.Resolve(o)
 		if e != nil {
@@ -204,16 +209,29 @@ func run(args []string) (int, error) {
 		fmt.Println(licensing.JSON(core.Version))
 		return 0, nil
 	}
+	if command == "package-check" {
+		return packageCheck()
+	}
+	if command == "maintenance" {
+		return maintenance(o)
+	}
+	if command == "uninstall-entrypoints" {
+		if err := managed.UninstallEntrypoints(o.Home); err != nil {
+			return 1, err
+		}
+		fmt.Println("Owned command entrypoints removed. Profiles, runtime generations and saved credentials retained. Existing processes were not stopped.")
+		return 0, nil
+	}
 	ctx, stop := operationContext(command)
 	defer stop()
-	runtimeManager := managed.Manager{Context: ctx, ActivityDetails: o.ActivityDetails, Diagnostics: o.Diagnostics}
+	runtimeManager := managed.Manager{Context: ctx, ActivityDetails: o.ActivityDetails, Diagnostics: o.Diagnostics, ForceRepair: command == "repair"}
 	var report func(string)
 	if command == "setup" {
 		style := display.Detect(os.Stderr)
 		// Keep Setup progress ordered before the next interactive input prompt.
 		runtimeManager.Progress = func(message string) { fmt.Fprint(os.Stderr, style.Format(message)) }
 	}
-	if command == "start" || command == "update" || command == "rollback" {
+	if command == "start" || command == "update" || command == "repair" || command == "doctor" || command == "rollback" {
 		style := display.Detect(os.Stderr)
 		reporter := display.New(os.Stderr, style)
 		defer reporter.Close()
@@ -251,17 +269,21 @@ func run(args []string) (int, error) {
 	case "doctor":
 		var result map[string]any
 		if o.Device == "" {
-			result, e = a.DoctorHome(o.Home)
+			if selected, err := core.Resolve(o); err == nil {
+				result, e = a.Doctor(selected)
+			} else {
+				result, e = a.DoctorHome(o.Home)
+			}
 		} else {
 			result, e = a.Doctor(o)
 		}
-		if e == nil {
+		if result != nil {
 			b, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(b))
 		}
 	case "credentials":
 		e = a.Credentials(o)
-	case "update":
+	case "update", "repair":
 		e = a.Update(o, false)
 		if e == nil {
 			fmt.Println("Pinned runtime ready; applies at next start. Existing process was not restarted.")

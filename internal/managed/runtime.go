@@ -100,8 +100,10 @@ func hashFileContext(ctx context.Context, file string) (string, error) {
 func hashBytes(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 
 type Receipt struct {
-	Manifest Manifest
-	Files    map[string]string
+	Manifest      Manifest
+	Files         map[string]string
+	SchemaVersion int    `json:"schemaVersion,omitempty"`
+	Scope         string `json:"scope,omitempty"`
 }
 type Manager struct {
 	Context          context.Context
@@ -112,6 +114,7 @@ type Manager struct {
 	ActivityDetails  bool
 	ActivityColor    bool
 	Diagnostics      bool
+	ForceRepair      bool
 }
 
 func (m Manager) stage(label string, work func() error) error {
@@ -148,22 +151,20 @@ func downloadContext(parent context.Context, url, file, expected string) error {
 	if e != nil {
 		return e
 	}
-	_, e = io.Copy(f, io.LimitReader(resp.Body, 250*1024*1024+1))
+	hash := sha256.New()
+	n, copyErr := io.Copy(io.MultiWriter(f, hash), io.LimitReader(resp.Body, 250*1024*1024+1))
+	e = copyErr
 	closeErr := f.Close()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if e != nil {
 		return e
 	}
 	if closeErr != nil {
 		return closeErr
 	}
-	h, e := hashFileContext(ctx, file)
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	if errors.Is(e, context.DeadlineExceeded) {
-		return errors.New("official archive download/hash exceeded its 3 minute deadline; existing runtime preserved")
-	}
-	if e != nil || h != expected {
+	if n > 250*1024*1024 || hex.EncodeToString(hash.Sum(nil)) != expected {
 		return errors.New("official archive SHA256 mismatch; existing runtime preserved")
 	}
 	return nil
@@ -487,12 +488,13 @@ func (manager Manager) populateRuntime(ctx context.Context, stage string, m Mani
 	if e = os.WriteFile(filepath.Join(stage, "licensing.mjs"), license, 0600); e != nil {
 		return e
 	}
-	var files map[string]string
-	files = map[string]string{}
-	if e = manager.inventory(ctx, "全 runtime ファイルの SHA-256 を記録", stage, func(p, h string) error { files[p] = h; return nil }); e != nil {
+	// npm ci already checks the fixed lock's package integrity. Do not reopen
+	// every expanded dependency to produce an exhaustive receipt during setup.
+	r, e := captureLaunchReceipt(ctx, stage, m)
+	if e != nil {
 		return e
 	}
-	receipt, _ := json.Marshal(Receipt{m, files})
+	receipt, _ := json.Marshal(r)
 	if e = os.WriteFile(filepath.Join(stage, "receipt.json"), receipt, 0600); e != nil {
 		return e
 	}
@@ -506,7 +508,7 @@ func (manager Manager) Verify(home, id string) error {
 	if !compatibleRuntimeID(m, id) {
 		return core.ErrRuntimePinUnsupported
 	}
-	return manager.verifyDirectory(manager.context(), filepath.Join(home, "releases", id), m)
+	return manager.verifyReadiness(manager.context(), filepath.Join(home, "releases", id), m)
 }
 func verifyDirectory(dir string, m Manifest) error {
 	return (Manager{}).verifyDirectory(context.Background(), dir, m)
@@ -526,7 +528,7 @@ func (manager Manager) verifyDirectory(parent context.Context, dir string, m Man
 		return errors.New("runtime receipt manifest mismatch")
 	}
 	count := 0
-	e = manager.inventory(ctx, "保存済み全 runtime ファイルを検証", dir, func(p, h string) error {
+	e = manager.inventoryWithTotal(ctx, "保存済み全 runtime ファイルを検証", dir, int64(len(r.Files)), func(p, h string) error {
 		count++
 		if r.Files[p] != h {
 			return errors.New("runtime integrity check failed")

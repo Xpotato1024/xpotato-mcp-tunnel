@@ -57,24 +57,41 @@ def assemble(binary, output, version, commit, platform, dirty, build_info,
     shutil.copy2(binary, content / name)
     if platform.startswith("linux"):
         (content / name).chmod(0o755)
-    for doc in DOCS:
-        shutil.copy2(ROOT / "docs" / doc, content / doc)
-    # Binary packages flatten docs; keep the legal/source links inside them.
-    guide = content / "licensing.md"
-    guide.write_text(guide.read_text(encoding="utf-8").replace("../LICENSE", "LICENSE")
-                     .replace("../COPYRIGHT", "COPYRIGHT")
-                     .replace("../THIRD-PARTY-NOTICES.txt", "THIRD-PARTY-NOTICES.txt"),
-                     encoding="utf-8", newline="\n")
-    shutil.copy2(ROOT / "docs/quickstart.md", content / "README.md")
-    shutil.copy2(ROOT / "THIRD-PARTY-NOTICES.txt", content / "THIRD-PARTY-NOTICES.txt")
+    (content / "docs").mkdir()
+    (content / "licenses").mkdir()
+    for doc in (*DOCS, "installer-lifecycle.md", "installer-platforms.md"):
+        target = content / "docs" / doc
+        shutil.copy2(ROOT / "docs" / doc, target)
+        if target.suffix == ".md":
+            target.write_text(target.read_text(encoding="utf-8")
+                              .replace("../LICENSE", "../licenses/LICENSE")
+                              .replace("../COPYRIGHT", "../licenses/COPYRIGHT")
+                              .replace("../THIRD-PARTY-NOTICES.txt", "../licenses/THIRD-PARTY-NOTICES.txt"),
+                              encoding="utf-8", newline="\n")
+    (content / "README.md").write_text(
+        f"# Xpotato Tunnel {version}\n\n"
+        "Windows: open the Installer for normal installation. This ZIP is the portable option.\n"
+        "The Installer is a review candidate until separately approved and published.\n\n"
+        f"Portable: run `{name} maintenance` in an interactive terminal, select Setup, then Start.\n"
+        "Setup asks for permissions and masked key input; Go/Node/npm need no prior installation.\n"
+        "Network access is required to acquire pinned runtimes. Stop with Ctrl+C in the Start terminal.\n\n"
+        "Update reuses a compatible runtime with bounded launch/configuration checks. Repair acquires a new generation.\n"
+        "Full dependency diagnosis is explicit: `doctor --deep`. It may download a reference and scan all dependencies.\n"
+        "Existing processes are never stopped by maintenance actions. Changes apply at next start.\n\n"
+        "[Installation design and limits](docs/installer-lifecycle.md) / "
+        "[Published-release quickstart](docs/quickstart.md) / [Operations](docs/operations.md)\n\n"
+        "[License and source](docs/licensing.md) / [LICENSE](licenses/LICENSE) / "
+        "[Copyright](licenses/COPYRIGHT) / [Third-party notices](licenses/THIRD-PARTY-NOTICES.txt)\n",
+        encoding="utf-8", newline="\n")
+    shutil.copy2(ROOT / "THIRD-PARTY-NOTICES.txt", content / "licenses/THIRD-PARTY-NOTICES.txt")
     for notice in ("LICENSE", "COPYRIGHT", "CHANGES.md"):
-        shutil.copy2(ROOT / notice, content / notice)
-    changes = content / "CHANGES.md"
-    changes.write_text(changes.read_text(encoding="utf-8").replace("(docs/licensing.md)", "(licensing.md)"),
+        shutil.copy2(ROOT / notice, content / "licenses" / notice)
+    changes = content / "licenses/CHANGES.md"
+    changes.write_text(changes.read_text(encoding="utf-8").replace("(docs/licensing.md)", "(../docs/licensing.md)"),
                        encoding="utf-8", newline="\n")
     if platform.startswith("windows"):
         shutil.copy2(ROOT / "scripts/verify-windows.ps1", content / "verify-windows.ps1")
-    shutil.copytree(ROOT / "docs/performance-results", content / "performance-results")
+    shutil.copytree(ROOT / "docs/performance-results", content / "docs/performance-results")
     shutil.copy2(ROOT / "setup.env.example", content / "setup.env.example")
     # The executable path printed by `go version -m` depends on the build machine.
     lines = build_info.splitlines()

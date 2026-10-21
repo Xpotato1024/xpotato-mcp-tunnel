@@ -2,6 +2,7 @@ package managed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -50,6 +51,12 @@ func runStageDetail(report func(string), label string, interval time.Duration, d
 	state := "完了"
 	if err != nil {
 		state = "失敗"
+	}
+	if errors.Is(err, context.Canceled) {
+		state = "中断"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		state = "タイムアウト"
 	}
 	report(fmt.Sprintf("%s — %s（経過 %s）%s", label, state, time.Since(started).Truncate(time.Second), status()))
 	if err != nil {

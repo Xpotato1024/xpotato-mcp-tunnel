@@ -1,5 +1,7 @@
 # 導入・更新の入口
 
+> 未公開 Draft の Installer / repair / 明示的 deep 診断は [installer-lifecycle](installer-lifecycle.md) を参照してください。以下は公開済み v0.2.10 の手順です。
+
 v0.2.10は更新時の完全検証の重複を減らし、core/runtimeの切替と取消・再開を改善しています。通常Startの完全検証は維持しています。v0.2.9のログ設定修正も含みます。旧v0.2.8からも、新exeの`update`で既存設定・保存済みキー・Tunnel IDを維持して更新できます。[旧版の障害と一時的な起動方法](operations.md#v028のログ設定エラー)も参照できます。
 
 対応はWindows/Linux amd64です。通常ユーザーの対話端末で実行します。管理者/rootでの起動、OS権限やPATHの変更、自動常駐は行いません。端末からOpenAIへの外向きHTTPSと、本人のOS資格情報保管庫が必要です。

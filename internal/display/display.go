@@ -33,7 +33,7 @@ func Detect(file *os.File) Style {
 func (s Style) Format(message string) string {
 	tag, color := "INFO", "36"
 	switch {
-	case strings.Contains(message, "失敗"), strings.Contains(message, "エラー"):
+	case strings.Contains(message, "失敗"), strings.Contains(message, "エラー"), strings.Contains(message, "タイムアウト"):
 		tag, color = "ERR", "31"
 	case strings.Contains(message, "切断"), strings.Contains(message, "停止"):
 		tag, color = "OFF", "33"

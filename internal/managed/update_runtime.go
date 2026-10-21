@@ -30,11 +30,11 @@ func (m Manager) manifest() (Manifest, error) {
 }
 
 func compatibleRuntimeID(m Manifest, id string) bool {
-	if id == releaseID(m) {
+	if id == releaseID(m) || isRepairRuntimeID(m, id) {
 		return true
 	}
 	// These reviewed legacy recipes have the same dependency pins and adapters.
-	// The directory name alone never authorizes adoption: full verification follows.
+	// The directory name alone never authorizes adoption: readiness checks follow.
 	for _, version := range []string{"0.2.6", "0.2.7", "0.2.8", "0.2.9"} {
 		if id == "core-"+version+"-"+m.Platform+"-tunnel-"+tunnelVersion+"-dc-"+commanderVersion+"-node-"+nodeVersion {
 			return true
@@ -71,9 +71,16 @@ func (manager Manager) PrepareRuntime(home, current string) (core.PreparedRuntim
 	}
 	p := &runtimePreparation{manager: manager, manifest: m, id: releaseID(m), unlock: unlock}
 	fail := func(e error) (core.PreparedRuntime, error) { p.Close(); return nil, e }
+	if manager.ForceRepair {
+		id, err := newRepairRuntimeID(m)
+		if err != nil {
+			return fail(err)
+		}
+		p.id = id
+	}
 	// Only the explicitly selected compatible runtime is considered for legacy
 	// reuse. No enumeration/rehashing of other installations or staged leftovers.
-	if compatibleRuntimeID(m, current) {
+	if !manager.ForceRepair && compatibleRuntimeID(m, current) {
 		candidate := filepath.Join(releases, current)
 		if st, err := os.Lstat(candidate); err == nil {
 			if !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
@@ -88,6 +95,9 @@ func (manager Manager) PrepareRuntime(home, current string) (core.PreparedRuntim
 	if st, e := os.Lstat(p.destination); e == nil {
 		if !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
 			return fail(errors.New("runtime generation directory invalid"))
+		}
+		if manager.ForceRepair {
+			return fail(errors.New("repair generation already exists"))
 		}
 		return p, nil
 	} else if !os.IsNotExist(e) {
@@ -116,7 +126,7 @@ func (p *runtimePreparation) Verify() (string, error) {
 	if dir == "" {
 		dir = p.destination
 	}
-	if e := p.manager.verifyDirectory(p.manager.context(), dir, p.manifest); e != nil {
+	if e := p.manager.verifyReadiness(p.manager.context(), dir, p.manifest); e != nil {
 		return "", e
 	}
 	if e := p.manager.context().Err(); e != nil {
@@ -127,6 +137,8 @@ func (p *runtimePreparation) Verify() (string, error) {
 			return "", e
 		}
 		p.stage = ""
+		// Retain the old, possibly damaged tree. Never delete it as a side effect
+		// of repair, and never stop a running process to replace it.
 	}
 	return p.id, nil
 }
@@ -144,13 +156,21 @@ func (p *runtimePreparation) Close() {
 }
 
 func (m Manager) inventory(ctx context.Context, label, root string, visit func(string, string) error) error {
+	return m.inventoryWithTotal(ctx, label, root, -1, visit)
+}
+func (m Manager) inventoryWithTotal(ctx context.Context, label, root string, total int64, visit func(string, string) error) error {
 	ctx, cancel := context.WithTimeout(ctx, fileOperationTimeout)
 	defer cancel()
 	if m.inventoryStarted != nil {
 		m.inventoryStarted()
 	}
 	var files, bytes atomic.Int64
-	detail := func() string { return fmt.Sprintf("%d files / %d bytes", files.Load(), bytes.Load()) }
+	detail := func() string {
+		if total >= 0 {
+			return fmt.Sprintf("files %d/%d; bytes %d (total unknown)", files.Load(), total, bytes.Load())
+		}
+		return fmt.Sprintf("files %d; bytes %d (totals unknown)", files.Load(), bytes.Load())
+	}
 	return runStageDetail(m.Progress, label, progressInterval, detail, func() error {
 		return walkFileHashesObserved(ctx, root, visit, func(p InventoryProgress) { files.Store(p.Files); bytes.Store(p.Bytes) })
 	})

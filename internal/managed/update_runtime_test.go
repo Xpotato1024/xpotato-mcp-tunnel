@@ -33,7 +33,7 @@ func BenchmarkUpdateInventoryPasses(b *testing.B) {
 	if e != nil {
 		b.Fatal(e)
 	}
-	receipt, _ := json.Marshal(Receipt{m, files})
+	receipt, _ := json.Marshal(Receipt{Manifest: m, Files: files})
 	os.WriteFile(filepath.Join(root, "receipt.json"), receipt, 0600)
 	for _, tc := range []struct {
 		name   string
@@ -73,7 +73,7 @@ func TestPinnedFilesCannotBeChangedAlongWithReceipt(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			b, _ := json.Marshal(Receipt{m, files})
+			b, _ := json.Marshal(Receipt{Manifest: m, Files: files})
 			os.WriteFile(filepath.Join(root, "receipt.json"), b, 0600)
 			if e = verifyDirectory(root, m); e == nil {
 				t.Fatal("compiled-in pin/marker bypassed by receipt edit")
@@ -85,6 +85,9 @@ func TestPinnedFilesCannotBeChangedAlongWithReceipt(t *testing.T) {
 func syntheticRuntime(t testing.TB, dir string, m Manifest) {
 	t.Helper()
 	files := map[string][]byte{executable(): []byte("synthetic runtime"), "package-lock.json": mustAsset(t, "package-lock.json"), "stdio.mjs": mustAsset(t, "stdio.mjs"), "activity.mjs": mustAsset(t, "activity.mjs"), "licensing.mjs": mustAsset(t, "licensing.mjs"), "node_modules/@wonderwhy-er/desktop-commander/dist/index.js": []byte(marker + "\n"), "node/synthetic-node": []byte("fixture node")}
+	node, _ := nodeFiles(dir)
+	relative, _ := filepath.Rel(dir, node)
+	files[relative] = []byte("fixture node executable")
 	for p, b := range files {
 		dest := filepath.Join(dir, filepath.FromSlash(p))
 		if e := os.MkdirAll(filepath.Dir(dest), 0700); e != nil {
@@ -133,7 +136,7 @@ func TestRuntimeRecipeIsIndependentOfCoreAndIncludesContent(t *testing.T) {
 	}
 }
 
-func TestUpdateRuntimeReuseVerifiesExactlyOnceAndKeepsInventoryChecks(t *testing.T) {
+func TestUpdateRuntimeReuseUsesOnlyBoundedReadiness(t *testing.T) {
 	for _, change := range []string{"none", "change", "missing", "extra", "receipt"} {
 		t.Run(change, func(t *testing.T) {
 			home := t.TempDir()
@@ -143,9 +146,11 @@ func TestUpdateRuntimeReuseVerifiesExactlyOnceAndKeepsInventoryChecks(t *testing
 			syntheticRuntime(t, dir, m)
 			switch change {
 			case "change":
-				os.WriteFile(filepath.Join(dir, "node", "synthetic-node"), []byte("changed"), 0600)
+				node, _ := nodeFiles(dir)
+				os.WriteFile(node, []byte("changed"), 0600)
 			case "missing":
-				os.Remove(filepath.Join(dir, "node", "synthetic-node"))
+				node, _ := nodeFiles(dir)
+				os.Remove(node)
 			case "extra":
 				os.WriteFile(filepath.Join(dir, "extra"), nil, 0600)
 			case "receipt":
@@ -162,20 +167,20 @@ func TestUpdateRuntimeReuseVerifiesExactlyOnceAndKeepsInventoryChecks(t *testing
 				t.Fatal("prepared by hashing/downloading")
 			}
 			got, e := p.Verify()
-			if (change == "none") != (e == nil) {
+			if (change == "none" || change == "extra") != (e == nil) {
 				t.Fatal("incorrect integrity result", e)
 			}
 			if e == nil && got != id {
 				t.Fatal("legacy generation copied/rekeyed")
 			}
-			if walks != 1 && change != "receipt" || populates != 0 {
+			if walks != 0 || populates != 0 {
 				t.Fatal("duplicate scan/population", walks, populates)
 			}
 		})
 	}
 }
 
-func TestNewRuntimePreparedButNotPublishedBeforeFullVerification(t *testing.T) {
+func TestNewRuntimePreparedWithoutExpandedTreeInventory(t *testing.T) {
 	home := t.TempDir()
 	m := fixtureManifest(t)
 	walks := 0
@@ -190,11 +195,11 @@ func TestNewRuntimePreparedButNotPublishedBeforeFullVerification(t *testing.T) {
 	}
 	id, e := p.Verify()
 	p.Close()
-	if e != nil || id != releaseID(m) || walks != 1 {
+	if e != nil || id != releaseID(m) || walks != 0 {
 		t.Fatal(id, e, walks)
 	}
-	if e = manager.Verify(home, id); e != nil || walks != 2 {
-		t.Fatal("normal Start Verify bypassed full scan", e, walks)
+	if e = manager.Verify(home, id); e != nil || walks != 0 {
+		t.Fatal("normal Start performed full scan or failed readiness", e, walks)
 	}
 }
 
