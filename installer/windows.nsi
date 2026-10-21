@@ -13,6 +13,34 @@ Var PayloadFolder
 !include "MUI2.nsh"
 !include "x64.nsh"
 !include "FileFunc.nsh"
+!include "LogicLib.nsh"
+; Attribute-only checks of fixed known parents, never a tree walk/hash pass.
+; Missing directories permit a partial-uninstall retry; all other errors fail.
+!macro CheckDirectory path failure
+  System::Call 'kernel32::GetFileAttributesW(w "${path}") i.r2 ?e'
+  Pop $3
+  ${If} $2 == -1
+    ${If} $3 != 2
+    ${AndIf} $3 != 3
+      Goto ${failure}
+    ${EndIf}
+  ${Else}
+    IntOp $3 $2 & 0x400
+    ${If} $3 != 0
+      Goto ${failure}
+    ${EndIf}
+    IntOp $3 $2 & 0x10
+    ${If} $3 == 0
+      Goto ${failure}
+    ${EndIf}
+  ${EndIf}
+!macroend
+!macro CheckBase failure
+  !insertmacro CheckDirectory "$LOCALAPPDATA" ${failure}
+  !insertmacro CheckDirectory "$LOCALAPPDATA\Programs" ${failure}
+  !insertmacro CheckDirectory "$LOCALAPPDATA\Programs\XpotatoTunnel" ${failure}
+!macroend
+!include "check-directories.nsh"
 !macro CheckCore failure
   ; Authenticate the selected executable against the build-time payload digest
   ; before invoking it, including when reopening an existing installation.
@@ -48,6 +76,8 @@ FunctionEnd
 
 Function CleanupStage
   StrCmp $StagingDir "" finished
+  !insertmacro CheckBase finished
+  !insertmacro CheckPayloadDirectories "$StagingDir" finished
   SetOutPath "$TEMP"
   ; Exact child created by GetTempFileName below, no recursive removal.
   !include "cleanup-stage.nsh"
@@ -62,6 +92,8 @@ FunctionEnd
 Section "Application"
   SetShellVarContext current
   StrCmp $INSTDIR "$LOCALAPPDATA\Programs\XpotatoTunnel\${VERSION}" 0 invalid
+  !insertmacro CheckBase invalid
+  !insertmacro CheckPayloadDirectories "$INSTDIR" invalid
   ; Same-version payloads are immutable. Reopening a complete installation
   ; offers maintenance; changed/partial files are never silently overwritten.
   IfFileExists "$INSTDIR\*.*" existing
@@ -77,10 +109,15 @@ Section "Application"
   ; GetTempFileName supplies the OS-generated ASCII basename, never a user
   ; supplied path. This keeps the PowerShell code independent of user paths.
   ${GetFileName} "$StagingDir" $PayloadFolder
+  ClearErrors
   !include "install-files.nsh"
+  IfErrors invalid
   !insertmacro CheckCore invalid
   StrCpy $0 1
-  ExecWait '"$StagingDir\xpotato-tunnel.exe" package-check' $0
+  ; Extraction already checks container CRC; launch/version is the minimal
+  ; post-extraction check. Do not reopen every doc/payload file here.
+  ExecWait '"$StagingDir\xpotato-tunnel.exe" version' $0
+  IfErrors invalid
   StrCmp $0 0 0 invalid
   SetOutPath "$TEMP"
   ClearErrors
@@ -94,9 +131,12 @@ check:
   StrCpy $PayloadFolder "${VERSION}"
   !insertmacro CheckCore invalid
   StrCpy $0 1
-  ExecWait '"$INSTDIR\xpotato-tunnel.exe" package-check' $0
+  ExecWait '"$INSTDIR\xpotato-tunnel.exe" version' $0
+  IfErrors invalid
   StrCmp $0 0 register invalid
 register:
+  !insertmacro CheckDirectory "$SMPROGRAMS" invalid
+  !insertmacro CheckDirectory "$SMPROGRAMS\Xpotato Tunnel" invalid
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\Xpotato Tunnel"
   CreateShortcut "$SMPROGRAMS\Xpotato Tunnel\Xpotato Tunnel.lnk" "$INSTDIR\xpotato-tunnel.exe" "maintenance"
@@ -126,10 +166,16 @@ FunctionEnd
 
 Section "Uninstall"
   SetShellVarContext current
-  ; Check only the small shipped payload, then remove unchanged owned wrappers.
+  !insertmacro CheckBase changed
+  !insertmacro CheckPayloadDirectories "$INSTDIR" changed
+  !insertmacro CheckDirectory "$SMPROGRAMS" changed
+  !insertmacro CheckDirectory "$SMPROGRAMS\Xpotato Tunnel" changed
+  ; Authenticate/launch only the helper, then remove unchanged owned wrappers.
+  ; Do not require all docs to remain present after a partial uninstall.
   !insertmacro CheckCore changed
   StrCpy $0 1
-  ExecWait '"$INSTDIR\xpotato-tunnel.exe" package-check' $0
+  ExecWait '"$INSTDIR\xpotato-tunnel.exe" version' $0
+  IfErrors changed
   StrCmp $0 0 payloadValid
   MessageBox MB_OK|MB_ICONSTOP "Payload changed. Files and registration preserved." /SD IDOK
   SetErrorLevel 1
@@ -139,15 +185,16 @@ payloadValid:
   StrCmp $1 "${VERSION}" 0 removePayload
   StrCpy $0 1
   ExecWait '"$INSTDIR\xpotato-tunnel.exe" uninstall-entrypoints' $0
+  IfErrors changed
   StrCmp $0 0 removePayload
   MessageBox MB_OK|MB_ICONSTOP "Command entrypoints could not be removed safely. Profiles, credentials and files preserved." /SD IDOK
   SetErrorLevel 1
   Abort
 removePayload:
+  !include "uninstall-files.nsh"
   ClearErrors
   Delete "$INSTDIR\xpotato-tunnel.exe"
   IfErrors blocked
-  !include "uninstall-files.nsh"
   ; Only this version's registration is removed. Other versions may still be
   ; used by running processes or a rollback and are never swept recursively.
   StrCmp $1 "${VERSION}" 0 keepRegistration

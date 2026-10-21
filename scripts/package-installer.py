@@ -31,15 +31,17 @@ def generate_includes(payload, output):
     if not files or len(files) > 128 or any(p.is_symlink() for p in payload.rglob("*")):
         raise ValueError("unexpected installer payload")
     install, remove, cleanup = [], [], []
-    for path in files:
+    for index, path in enumerate(files):
         relative = path.relative_to(payload)
         name = nsis_literal(str(relative).replace("/", "\\"))
         parent = str(relative.parent).replace("/", "\\")
         suffix = "" if parent == "." else "\\" + nsis_literal(parent)
-        install += [f'  SetOutPath "$StagingDir{suffix}"', f'  File "{nsis_literal(path)}"']
+        install += [f'  SetOutPath "$StagingDir{suffix}"', '  IfErrors invalid',
+                    f'  File "{nsis_literal(path)}"', '  IfErrors invalid']
         cleanup.append(f'  Delete "$StagingDir\\{name}"')
         if name != "xpotato-tunnel.exe":
-            remove.append(f'  Delete "$INSTDIR\\{name}"')
+            remove += [f'  IfFileExists "$INSTDIR\\{name}" 0 removed_{index}',
+                       '  ClearErrors', f'  Delete "$INSTDIR\\{name}"', '  IfErrors blocked', f'removed_{index}:']
     directories = {p.parent for p in files}
     for path in list(directories):
         while path != payload:
@@ -49,6 +51,14 @@ def generate_includes(payload, output):
         if path != payload:
             remove.append(f'  RMDir "$INSTDIR\\{nsis_literal(str(path.relative_to(payload)))}"')
             cleanup.append(f'  RMDir "$StagingDir\\{nsis_literal(str(path.relative_to(payload)))}"')
+    checks = ['!macro CheckPayloadDirectories base failure',
+              '  !insertmacro CheckDirectory "${base}" ${failure}']
+    for path in sorted(directories, key=lambda p: (len(p.parts), str(p))):
+        if path != payload:
+            relative = nsis_literal(str(path.relative_to(payload)).replace("/", "\\"))
+            checks.append('  !insertmacro CheckDirectory "${base}\\' + relative + '" ${failure}')
+    checks.append('!macroend')
+    (output / "check-directories.nsh").write_text("\n".join(checks) + "\n", encoding="utf-8")
     for name, lines in (("install-files.nsh", install), ("uninstall-files.nsh", remove), ("cleanup-stage.nsh", cleanup)):
         (output / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -73,6 +83,12 @@ def main():
     info = json.loads((args.content / "build-info.json").read_text(encoding="utf-8"))
     if info["platform"] != "windows-amd64" or info["dirty"] or not re.fullmatch(r"\d+\.\d+\.\d+", info["version"]):
         raise ValueError("expected clean Windows payload")
+    binary = args.content.resolve() / "xpotato-tunnel.exe"
+    if subprocess.check_output([str(binary), "version"], text=True).strip() != info["version"]:
+        raise ValueError("installer payload version differs from executable")
+    source = json.loads(subprocess.check_output([str(binary), "source"], text=True))
+    if source["commit"] != info["commit"] or source["modified"]:
+        raise ValueError("installer executable provenance differs from payload")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     payload = output / "payload"

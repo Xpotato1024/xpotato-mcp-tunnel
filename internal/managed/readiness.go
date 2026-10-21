@@ -77,17 +77,15 @@ func readReceipt(root string, expected Manifest) (Receipt, error) {
 	if len(receipt.Files) == 0 || len(receipt.Files) > 100000 {
 		return receipt, errors.New("runtime receipt inventory invalid")
 	}
-	for name, sum := range receipt.Files {
-		parts := strings.Split(name, "/")
-		if name == "" || strings.ContainsAny(name, "\\:\x00") || strings.HasPrefix(name, "/") {
-			return receipt, errors.New("invalid runtime receipt path")
-		}
-		for _, part := range parts {
-			if part == "" || part == "." || part == ".." {
-				return receipt, errors.New("invalid runtime receipt path")
-			}
-		}
-		digest, e := hex.DecodeString(sum)
+	names := launchFiles(root)
+	if receipt.SchemaVersion == 2 && len(receipt.Files) != len(names) {
+		return receipt, errors.New("launch receipt contains unexpected entries")
+	}
+	// Compatibility reads one bounded legacy metadata file, not its expanded
+	// tree. Validate only our fixed launch keys; the exhaustive map is used only
+	// by explicit deep diagnosis. Never join a legacy receipt's path to root.
+	for _, name := range names {
+		digest, e := hex.DecodeString(receipt.Files[name])
 		if e != nil || len(digest) != 32 {
 			return receipt, errors.New("invalid runtime receipt hash")
 		}

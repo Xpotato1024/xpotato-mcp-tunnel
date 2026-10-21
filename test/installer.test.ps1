@@ -18,6 +18,11 @@ function Run-Fixture([string]$File, [string[]]$Arguments, [bool]$ExpectSuccess) 
     if (($process.ExitCode -eq 0) -ne $ExpectSuccess) { throw "Unexpected fixture exit code: $($process.ExitCode)" }
 }
 $installer = (Resolve-Path -LiteralPath $InstallerPath).Path
+# A stage left before any completed installation must not block a fresh retry.
+$foreignStage = Join-Path $appRoot 'stage-from-another-fixture'
+New-Item -ItemType Directory -Path $foreignStage -Force | Out-Null
+$foreignFile = Join-Path $foreignStage 'keep.txt'
+Set-Content -LiteralPath $foreignFile -Value 'unrelated stage'
 Run-Fixture $installer @('/S') $true
 Run-Fixture $installer @('/S') $true
 $core = Join-Path $installed 'xpotato-tunnel.exe'
@@ -25,11 +30,6 @@ $core = Join-Path $installed 'xpotato-tunnel.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Installed payload invalid' }
 if ((Get-ItemProperty -LiteralPath $registration).DisplayVersion -ne $Version) { throw 'Registration mismatch' }
 if (Test-Path -LiteralPath $profile) { throw 'Installer unexpectedly created runtime/profile state' }
-# Stage left by a terminated earlier installer must not be swept or block retry.
-$foreignStage = Join-Path $appRoot 'stage-from-another-fixture'
-New-Item -ItemType Directory -Path $foreignStage | Out-Null
-$foreignFile = Join-Path $foreignStage 'keep.txt'
-Set-Content -LiteralPath $foreignFile -Value 'unrelated stage'
 Run-Fixture $installer @('/S') $true
 if (-not (Test-Path -LiteralPath $foreignFile)) { throw 'Unrelated stage removed' }
 # A nonsecret synthetic wrapper record. No Setup/Vault/runtime is used.
@@ -42,10 +42,31 @@ $record = @{Owner=('windows:' + [Security.Principal.WindowsIdentity]::GetCurrent
 $record | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $profile 'command-install.json') -Encoding utf8NoBOM
 $sentinel = Join-Path $profile 'retained-profile.json'
 Set-Content -LiteralPath $sentinel -Value 'nonsecret retained fixture'
-[IO.File]::WriteAllText($wrapper, 'modified wrapper')
 $uninstallCopy = Join-Path $env:RUNNER_TEMP 'xpotato-uninstaller-fixture.exe'
 Copy-Item -LiteralPath (Join-Path $installed 'Uninstall.exe') -Destination $uninstallCopy
 $uninstallArgs = @('/S', ('_?=' + $installed)) # NSIS requires final _?= path unquoted.
+# Reject altered directory parents before either invoking a helper or deleting
+# payload files. All paths belong to this guarded, ephemeral runner fixture.
+$licenses = Join-Path $installed 'licenses'
+$savedLicenses = Join-Path $installed 'licenses.fixture-owned'
+$external = Join-Path $env:RUNNER_TEMP ('xpotato-junction-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $external | Out-Null
+$externalSentinel = Join-Path $external 'LICENSE'
+Set-Content -LiteralPath $externalSentinel -Value 'outside installation; preserve'
+if (-not $savedLicenses.StartsWith($installed + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected fixture move path' }
+Move-Item -LiteralPath $licenses -Destination $savedLicenses
+try {
+    New-Item -ItemType Junction -Path $licenses -Target $external | Out-Null
+    Run-Fixture $installer @('/S') $false
+    Run-Fixture $uninstallCopy $uninstallArgs $false
+    if ([IO.File]::ReadAllText($externalSentinel).Trim() -ne 'outside installation; preserve') { throw 'External junction target changed' }
+    if (-not (Test-Path -LiteralPath $core) -or -not (Test-Path -LiteralPath $registration)) { throw 'Reparse preflight removed owned application' }
+} finally {
+    # Nonrecursive removal of the junction itself, never its target contents.
+    if ((Get-Item -LiteralPath $licenses -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { [IO.Directory]::Delete($licenses) }
+    Move-Item -LiteralPath $savedLicenses -Destination $licenses
+}
+[IO.File]::WriteAllText($wrapper, 'modified wrapper')
 Run-Fixture $uninstallCopy $uninstallArgs $false
 if (-not (Test-Path -LiteralPath $wrapper) -or -not (Test-Path -LiteralPath $registration)) { throw 'Modified wrapper or registration lost' }
 if ([IO.File]::ReadAllText($wrapper) -ne 'modified wrapper') { throw 'Modified wrapper contents changed' }
@@ -58,4 +79,4 @@ if (Test-Path -LiteralPath $wrapper) { throw 'In-use case did not reach removal 
 Run-Fixture $uninstallCopy $uninstallArgs $true
 if ((Test-Path -LiteralPath $installed) -or (Test-Path -LiteralPath $registration) -or (Test-Path -LiteralPath $wrapper)) { throw 'Owned application removal incomplete' }
 if (-not (Test-Path -LiteralPath $sentinel) -or -not (Test-Path -LiteralPath $foreignFile)) { throw 'Retained data removed' }
-Write-Output 'Installer fixture PASS: new, repeat, stale stage, modified wrapper, in-use file, uninstall, retained data.'
+Write-Output 'Installer fixture PASS: new, repeat, stale stage, junction refusal, modified wrapper, in-use file, uninstall, retained data.'

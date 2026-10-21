@@ -26,7 +26,8 @@ func TestManagedInstallSmoke(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	m := Manager{}
+	walks := 0
+	m := Manager{inventoryStarted: func() { walks++ }}
 	id, e := m.Install(home)
 	if e != nil {
 		t.Fatal(e)
@@ -35,6 +36,17 @@ func TestManagedInstallSmoke(t *testing.T) {
 		t.Fatal(e)
 	}
 	dir := filepath.Join(home, "releases", id)
+	recipe, err := m.manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := readReceipt(dir, recipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if walks != 0 || receipt.SchemaVersion != 2 || len(receipt.Files) != 7 {
+		t.Fatal("new install performed full inventory or wrote an exhaustive receipt", walks, receipt.SchemaVersion, len(receipt.Files))
+	}
 	// Integrity/version and direct stdio success do not validate the Go
 	// launcher's tunnel-client arguments. Exercise that path before MCP smoke.
 	testPinnedRuntimeStartupConfiguration(t, filepath.Join(dir, executable()))

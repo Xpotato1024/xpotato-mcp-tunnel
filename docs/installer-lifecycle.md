@@ -56,7 +56,7 @@ v0.2.10 では選択された runtime の展開済み全ファイルを再走査
 
 | 段階 | 通常経路で行うこと | 行わないこと |
 | --- | --- | --- |
-| 配布 core | Installer の固定 digest と小さな配布 payload の整合性・版確認 | 保存済み runtime の全走査 |
+| 配布 core | 展開中のNSIS CRC、固定 core digest と起動/version確認。payload全hashは候補作成時/明示診断 | 導入後のdocs/payload全件再hash、保存済み runtime の全走査 |
 | 新規取得 | Tunnel/Node archive を書き込みながら固定 SHA256 と照合。固定 lock による npm ci / SRI、ignore-scripts | archive を hash のため再度全読み込み |
 | 展開 | 安全なパスと通常ファイルを確認して必要な展開を行う | 展開後全依存の receipt 作成・二重全件 hash |
 | 新規導入・更新・起動 | 起動入口と構成7ファイルの存在・通常ファイル・hash、組込み pin、Commander patch、所有者・scope・core pin 確認 | file count に比例する余分な全依存走査 |
