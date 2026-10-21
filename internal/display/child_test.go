@@ -64,7 +64,10 @@ func TestChildStderrSlowAndFailedSinkCannotBlockProducer(t *testing.T) {
 	}
 	done := make(chan struct{})
 	go func() {
-		for i := 0; i < 1000; i++ {
+		// Exceed the real queue bound four times, rather than timing millions
+		// of formatting operations on a shared runner. This is an I/O blocking
+		// contract, not a CPU throughput benchmark; the deadline stays finite.
+		for i := 0; i < 4*maxQueuedBytes/3000+1; i++ {
 			w.Write([]byte(strings.Repeat("x", 3000) + "\n"))
 		}
 		w.Close()
@@ -81,6 +84,9 @@ func TestChildStderrSlowAndFailedSinkCannotBlockProducer(t *testing.T) {
 	w.reporter.mu.Unlock()
 	if queued > maxQueuedBytes || cap(w.partial) > maxMessageBytes {
 		t.Fatal("unbounded stderr")
+	}
+	if w.dropped == 0 {
+		t.Fatal("fixture did not exercise queue overflow")
 	}
 	close(sink.release)
 	select {
