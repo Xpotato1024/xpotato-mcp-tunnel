@@ -144,6 +144,8 @@ class SourcePolicyTests(unittest.TestCase):
                 root=Path(temp);directory=self.readme_fixture(root)
                 (directory/'README.md').write_bytes(b'upstream docs')
                 (directory/'Readme.md').write_bytes(b'upstream docs' if same else b'other docs')
+                if len([p for p in directory.iterdir() if p.name.casefold()=='readme.md'])!=2:
+                    self.skipTest('case-sensitive source producer filesystem required')
                 self.update_checksums(directory)
                 if not same:
                     with self.assertRaisesRegex(ValueError,'different README'):policy.normalize_readmes(root)
