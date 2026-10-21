@@ -6,6 +6,8 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
+import sys
+sys.dont_write_bytecode = True # Keep the delivered source inventory unchanged on import.
 from source_policy import ROOT, profile, digest, audit_vendor, long_path
 
 def verify_source(root):

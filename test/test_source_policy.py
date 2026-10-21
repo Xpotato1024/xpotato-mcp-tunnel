@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import sys
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -98,6 +100,16 @@ class SourcePolicyTests(unittest.TestCase):
         for name in ('objc2','objc2-web-kit','block2','dispatch2','core-foundation-sys','swift-rs'):
             self.assertTrue(policy.excluded(name,p))
         self.assertFalse(policy.excluded('windows',p))
+
+    def test_rebuild_entry_does_not_mutate_its_source_inventory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);content=root/'source';scripts=content/'scripts';scripts.mkdir(parents=True)
+            for name in ('rebuild-source.py','source_policy.py'):
+                shutil.copy2(ROOT/'scripts'/name,scripts/name)
+            source.pack(content,root/'fixture.tar.gz',1792392030)
+            env=dict(os.environ);env.pop('PYTHONDONTWRITEBYTECODE',None)
+            subprocess.run([sys.executable,str(scripts/'rebuild-source.py'),'--help'],env=env,check=True,stdout=subprocess.DEVNULL)
+            rebuild.verify_source(content)
 
     @unittest.skipUnless(os.name=='nt','explicit Windows file API path form')
     def test_long_paths_are_included_without_changing_os_policy(self):
