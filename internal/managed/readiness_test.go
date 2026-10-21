@@ -39,7 +39,7 @@ func TestLaunchReceiptAndNormalReuseNeverInventoryExpandedTree(t *testing.T) {
 	if err = manager.DeepVerify(home, id); err == nil {
 		t.Fatal("explicit deep diagnosis missed transitive alteration")
 	}
-	if walks != 1 {
+	if walks != 2 {
 		t.Fatal("deep diagnosis did not compare complete installed tree", walks)
 	}
 }

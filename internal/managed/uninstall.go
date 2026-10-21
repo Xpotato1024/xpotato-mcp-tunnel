@@ -14,6 +14,11 @@ func UninstallEntrypoints(home string) error {
 	if err := validateCommandPath(home); err != nil {
 		return err
 	}
+	if _, err := os.Lstat(filepath.Join(home, "command-install.json")); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
 	identity, err := platform.CurrentIdentity()
 	if err != nil {
 		return errors.New("uninstall owner unavailable")

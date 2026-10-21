@@ -2,6 +2,8 @@
 
 これは未公開の変更案です。公開済み v0.2.10 の asset/tag は変更しません。
 Tunnel core は Go を維持します。Laptop への導入や既存プロセスの停止はこの開発作業に含みません。
+全OSの一般利用者向け入口は共通GUIを目標とし、現PRのターミナル保守画面は途中段階です。
+[各OSの配布・GUI・署名・未対応範囲](installer-platforms.md) を参照してください。
 
 ## 利用者の入口
 
@@ -28,10 +30,10 @@ Repair は同じ固定レシピから新しい世代を取得します。壊れ�
 | --- | --- | --- |
 | Go 独自 Installer | 現行コードを再利用できるが、GUI・登録・削除・更新処理を自作 | OS向けの外側を自作する保守を避ける |
 | Rust Installer | core を呼べるが、別 toolchain と独自 lifecycle 実装が増える | 今回の問題に対する利点が小さい |
-| Tauri | Rust と Web UI、Windows配布は NSIS/MSI、WebView2 の扱いも必要 | 小さな保守メニューには構成が大きい |
+| Tauri | Rust と Web UI、Windows配布は NSIS/MSI、WebView2 の扱いも必要 | 全OS共通GUIの第一候補。現PRでは未実装 |
 | WiX MSI / Burn | Windows Installer の lifecycle を利用できる | MSI/component/bundle の管理が現状の用途には重い |
 | Inno Setup | ユーザー単位の一体型 Installer を作れる | 有力候補。既定のアプリ終了機能を無効化する設計が必要 |
-| **NSIS + Go** | NSIS は小さなユーザー単位の配置・削除、Go が既存の Setup/更新を担当 | **今回の選択。追加 frontend/runtime 不要** |
+| **NSIS + Go** | NSIS は小さなユーザー単位の配置・削除、Go が既存の Setup/更新を担当 | **Windows外装の選択。共通GUIは別層** |
 
 NSIS は `RequestExecutionLevel user`、zlib 圧縮、任意 plugin なしです。
 CRC は破損検知であり、発行者認証ではありません。Installer 内の core digest はビルド時に固定し、
@@ -94,9 +96,11 @@ toolchain の自動 download/install、Release、tag push、配布公開は行�
 python scripts/package-installer.py --content dist/package/content --output dist/installer --makensis ABSOLUTE_MAKENSIS_EXE --compiler-sha256 REVIEWED_SHA256 --nsis-license REVIEWED_LICENSE_FILE
 ```
 
-この引数の compiler pin と配布元 archive の精査は未完了です。便宜的な値で置き換えません。
+開発候補は公式 NSIS 3.13 portable ZIP の取得bytesを `installer/nsis-toolchain.json` の SHA256 に固定しています。
+`fetch-installer-tool.py --output NEW_DIRECTORY` で固定ZIPを取得・検査・展開し、OSへinstallせず使えます。
+compiler と配布元 COPYING も個別に固定し、compilerの外部設定は読みません。これは発行者署名の代替ではありません。
 NSIS license を payload に同梱し、対応 source bundle には Installer/script を含めます。
-NSIS toolchain と埋込み stub の正確な版・ライセンス記録を公開前にレビューします。
+署名・発行者認証と公開に関する最終判断は保留です。
 push/PR workflow は contents:read で検査と artifact 作成のみです。自動 deploy/publish はありません。
 
 ## 受入条件と未実施の検証
@@ -108,5 +112,8 @@ push/PR workflow は contents:read で検査と artifact 作成のみです。�
 - Installer の新規・再実行・版更新・中断・修復・削除・変更済み wrapper・実行中ケースを隔離した Windows fixture で確認する。
 - legal/source を含む package の相対リンク、同一 commit の Windows/Linux CI、独立レビューを確認する。
 
-現在 LLM-01 の別タスクの計測中です。ビルド、テスト、Installer実行、大きな取得、CI は保留しています。
-この Draft の実装を「検証済み Installer」とは扱いません。制限解除後に上記を検証し、不具合を修正してから公開可否を判断します。
+2026-10-21 05:35:17 UTC に性能計測の負荷保留が解除されました。
+Windows/Linux Goテスト各9パッケージとvet、Python13テスト、NSIS3.13候補コンパイルを確認しました。
+独立した静的レビューの4指摘を修正・再確認しています。
+Installer実行は実端末では行わず、隔離されたGitHub-hosted Windows runnerだけで行うfixtureを追加しています。
+exact-head CI、共通GUI、macOS/ARM、対話キャンセル/実際の版更新を含む全受入条件が揃うまで公開可能とは扱いません。

@@ -21,8 +21,7 @@ Var PayloadFolder
   ClearErrors
   ExecWait `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "try { if (([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([IO.File]::ReadAllBytes([IO.Path]::Combine([Environment]::GetFolderPath('LocalApplicationData'),'Programs\XpotatoTunnel\$PayloadFolder\xpotato-tunnel.exe')))) -replace '-','') -eq '${CORE_SHA}') { exit 0 }; exit 1 } catch { exit 1 }"` $0
   IfErrors ${failure}
-  StrCmp $0 0 +2
-  Goto ${failure}
+  StrCmp $0 0 0 ${failure}
 !macroend
 !define MUI_ABORTWARNING
 !define MUI_CUSTOMFUNCTION_ABORT CleanupStage
@@ -41,7 +40,8 @@ Function .onInit
   ; Reject /D overrides: file removal is restricted to the fixed per-user path.
   StrCpy $INSTDIR "$LOCALAPPDATA\Programs\XpotatoTunnel\${VERSION}"
   ${IfNot} ${RunningX64}
-    MessageBox MB_OK|MB_ICONSTOP "Windows amd64 is required."
+    MessageBox MB_OK|MB_ICONSTOP "Windows amd64 is required." /SD IDOK
+    SetErrorLevel 1
     Abort
   ${EndIf}
 FunctionEnd
@@ -81,8 +81,7 @@ Section "Application"
   !insertmacro CheckCore invalid
   StrCpy $0 1
   ExecWait '"$StagingDir\xpotato-tunnel.exe" package-check' $0
-  StrCmp $0 0 +2
-  Goto invalid
+  StrCmp $0 0 0 invalid
   SetOutPath "$TEMP"
   ClearErrors
   Rename "$StagingDir" "$INSTDIR"
@@ -110,15 +109,18 @@ register:
   Goto done
 invalid:
   Call CleanupStage
-  MessageBox MB_OK|MB_ICONSTOP "Installation incomplete or existing files changed. No runtime scan, process termination or protection bypass was attempted. Preserve this folder and report the error."
+  MessageBox MB_OK|MB_ICONSTOP "Installation incomplete or existing files changed. No runtime scan, process termination or protection bypass was attempted. Preserve this folder and report the error." /SD IDOK
+  SetErrorLevel 1
   Abort
 done:
 SectionEnd
 
 Function un.onInit
-  StrCmp $INSTDIR "$LOCALAPPDATA\Programs\XpotatoTunnel\${VERSION}" +3
-  MessageBox MB_OK|MB_ICONSTOP "Unexpected uninstall path. Nothing removed."
+  StrCmp $INSTDIR "$LOCALAPPDATA\Programs\XpotatoTunnel\${VERSION}" pathValid
+  MessageBox MB_OK|MB_ICONSTOP "Unexpected uninstall path. Nothing removed." /SD IDOK
+  SetErrorLevel 1
   Abort
+pathValid:
   StrCpy $PayloadFolder "${VERSION}"
 FunctionEnd
 
@@ -128,15 +130,18 @@ Section "Uninstall"
   !insertmacro CheckCore changed
   StrCpy $0 1
   ExecWait '"$INSTDIR\xpotato-tunnel.exe" package-check' $0
-  StrCmp $0 0 +3
-  MessageBox MB_OK|MB_ICONSTOP "Payload changed. Files and registration preserved."
+  StrCmp $0 0 payloadValid
+  MessageBox MB_OK|MB_ICONSTOP "Payload changed. Files and registration preserved." /SD IDOK
+  SetErrorLevel 1
   Abort
+payloadValid:
   ReadRegStr $1 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\XpotatoTunnel" "DisplayVersion"
   StrCmp $1 "${VERSION}" 0 removePayload
   StrCpy $0 1
   ExecWait '"$INSTDIR\xpotato-tunnel.exe" uninstall-entrypoints' $0
-  StrCmp $0 0 +3
-  MessageBox MB_OK|MB_ICONSTOP "Command entrypoints could not be removed safely. Profiles, credentials and files preserved."
+  StrCmp $0 0 removePayload
+  MessageBox MB_OK|MB_ICONSTOP "Command entrypoints could not be removed safely. Profiles, credentials and files preserved." /SD IDOK
+  SetErrorLevel 1
   Abort
 removePayload:
   ClearErrors
@@ -152,13 +157,15 @@ removePayload:
 keepRegistration:
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
-  MessageBox MB_OK "Application entrypoints removed. Profiles, saved keys and runtime generations retained. Existing processes were not stopped."
+  MessageBox MB_OK "Application entrypoints removed. Profiles, saved keys and runtime generations retained. Existing processes were not stopped." /SD IDOK
   Goto finished
 blocked:
-  MessageBox MB_OK|MB_ICONSTOP "Application file is in use or unavailable. No process was stopped; registration retained."
+  MessageBox MB_OK|MB_ICONSTOP "Application file is in use or unavailable. No process was stopped; registration retained." /SD IDOK
+  SetErrorLevel 1
   Abort
 changed:
-  MessageBox MB_OK|MB_ICONSTOP "Executable differs from the installed package. Nothing invoked or removed."
+  MessageBox MB_OK|MB_ICONSTOP "Executable differs from the installed package. Nothing invoked or removed." /SD IDOK
+  SetErrorLevel 1
   Abort
 finished:
 SectionEnd

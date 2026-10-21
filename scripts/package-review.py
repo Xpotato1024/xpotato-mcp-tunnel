@@ -59,7 +59,7 @@ def assemble(binary, output, version, commit, platform, dirty, build_info,
         (content / name).chmod(0o755)
     (content / "docs").mkdir()
     (content / "licenses").mkdir()
-    for doc in (*DOCS, "installer-lifecycle.md"):
+    for doc in (*DOCS, "installer-lifecycle.md", "installer-platforms.md"):
         target = content / "docs" / doc
         shutil.copy2(ROOT / "docs" / doc, target)
         if target.suffix == ".md":

@@ -209,7 +209,8 @@ func (m Manager) DeepVerify(home, id string) error {
 	if err = populate(ctx, reference, manifest); err != nil {
 		return err
 	}
-	expected, err := filesReceiptContext(ctx, reference)
+	expected := map[string]string{}
+	err = m.inventory(ctx, "診断用 reference の全件hash（明示操作）", reference, func(name, sum string) error { expected[name] = sum; return nil })
 	if err != nil {
 		return err
 	}

@@ -60,6 +60,32 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./test/quickstart.test.ps1 -BinaryPath ./dist/xpotato-tunnel.exe
+      - name: Build pinned Windows installer candidate (no publishing)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python scripts/fetch-installer-tool.py --output dist/nsis-toolchain
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned compiler acquisition failed' }
+          $pin = Get-Content installer/nsis-toolchain.json -Raw | ConvertFrom-Json
+          $tool = "dist/nsis-toolchain/nsis-$($pin.version)"
+          python scripts/package-installer.py --content dist/package/content --output dist/installer --makensis "$tool/makensis.exe" --compiler-sha256 $pin.compilerSHA256 --nsis-license "$tool/COPYING"
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - name: Isolated Windows installer lifecycle (no credentials)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $info = Get-Content dist/package/content/build-info.json -Raw | ConvertFrom-Json
+          ./test/installer.test.ps1 -InstallerPath "dist/installer/xpotato-tunnel-$($info.version)-windows-amd64-setup.exe" -Version $info.version
+      - name: Upload installer review candidate (no publishing)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installer-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            dist/installer/*-setup.exe
+            dist/installer/*.sha256
+          if-no-files-found: error
+          retention-days: 14
       - name: Corresponding source candidate and reproducibility (no publishing)
         if: runner.os == 'Linux'
         shell: bash

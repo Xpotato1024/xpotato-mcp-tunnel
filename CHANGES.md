@@ -9,7 +9,9 @@
 - Repair creates a new generation without replacing any running generation.
   Separate file/byte progress and report interruption/timeout/failure clearly.
 - Group packaged user docs and legal notices without losing source offers.
-- Build/test/CI and installer smoke validation are pending the measurement hold.
+- Windows/Linux Go fixtures and vet, Python packaging and NSIS compilation pass;
+  exact-head CI, isolated installer lifecycle and common GUI remain under review.
+- Cross-platform GUI/distribution design records the macOS/ARM and signing gaps.
 
 # 0.2.10 candidate — 2026-10-20
 

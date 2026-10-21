@@ -7,6 +7,16 @@ import (
 	"testing"
 )
 
+func TestUninstallWithoutRecordDoesNotCreateHome(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "not-created")
+	if err := UninstallEntrypoints(home); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(home); !os.IsNotExist(err) {
+		t.Fatal("uninstall created missing data home", err)
+	}
+}
+
 func TestUninstallPreservesModifiedWrapperAndAllUserData(t *testing.T) {
 	home := t.TempDir()
 	identity, err := platform.CurrentIdentity()

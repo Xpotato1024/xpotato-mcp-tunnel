@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 import re
 import shutil
@@ -60,13 +61,15 @@ def main():
     parser.add_argument("--compiler-sha256", required=True)
     parser.add_argument("--nsis-license", required=True, type=Path)
     args = parser.parse_args()
-    if not re.fullmatch(r"[a-f0-9]{64}", args.compiler_sha256) or digest(args.makensis) != args.compiler_sha256:
+    pin = json.loads((ROOT / "installer/nsis-toolchain.json").read_text(encoding="utf-8"))
+    if args.compiler_sha256 != pin["compilerSHA256"] or digest(args.makensis) != pin["compilerSHA256"]:
         raise ValueError("compiler differs from the separately reviewed pinned toolchain")
+    if digest(args.nsis_license) != pin["licenseSHA256"]:
+        raise ValueError("NSIS license differs from the reviewed distribution")
     spec = importlib.util.spec_from_file_location("package_review", ROOT / "scripts/package-review.py")
     package = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(package)
     package.verify(args.content)
-    import json
     info = json.loads((args.content / "build-info.json").read_text(encoding="utf-8"))
     if info["platform"] != "windows-amd64" or info["dirty"] or not re.fullmatch(r"\d+\.\d+\.\d+", info["version"]):
         raise ValueError("expected clean Windows payload")
@@ -83,10 +86,12 @@ def main():
     script = output / "windows.nsi"
     shutil.copyfile(ROOT / "installer/windows.nsi", script)
     installer = output / f"xpotato-tunnel-{info['version']}-windows-amd64-setup.exe"
-    subprocess.run([str(args.makensis.resolve()), "/INPUTCHARSET", "UTF8",
+    import os
+    compiler_env = {key: value for key, value in os.environ.items() if key.upper() not in ("NSISDIR", "NSISCONFDIR")}
+    subprocess.run([str(args.makensis.resolve()), "/NOCONFIG", "/INPUTCHARSET", "UTF8",
                     "/DVERSION=" + info["version"], "/DPAYLOAD=" + nsis_literal(payload),
                     "/DCORE_SHA=" + digest(payload / "xpotato-tunnel.exe"),
-                    "/DOUTPUT=" + nsis_literal(installer), str(script)], cwd=output, check=True)
+                    "/DOUTPUT=" + nsis_literal(installer), str(script)], cwd=output, env=compiler_env, check=True)
     (output / (installer.name + ".sha256")).write_text(
         f"{digest(installer)}  {installer.name}\n", encoding="utf-8", newline="\n")
     print(installer)
