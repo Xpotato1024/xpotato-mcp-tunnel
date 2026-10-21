@@ -36,7 +36,7 @@ def rebuild(root,target,output,tests=True):
     host=re.search(r'^host: (.+)$',subprocess.check_output(['rustc','-vV'],text=True),re.M)[1]
     if target!=host:raise ValueError('use the matching native host/SDK; cross compilation is not certified')
     if subprocess.check_output(['rustc','--version'],text=True).split()[1]!='1.94.1':raise ValueError('use Rust 1.94.1')
-    if not re.search(r'\bgo1\.27\.2\b',subprocess.check_output(['go','version'],text=True,env=dict(os.environ,GOTOOLCHAIN='local'))):raise ValueError('use Go 1.27.2')
+    if not re.search(r'\bgo1\.27\.3\b',subprocess.check_output(['go','version'],text=True,env=dict(os.environ,GOTOOLCHAIN='local'))):raise ValueError('use Go 1.27.3')
     output.mkdir(parents=True,exist_ok=False)
     env=dict(os.environ,GOPROXY='off',GOSUMDB='off',GOTOOLCHAIN='local',
         GOMODCACHE=str(output/'go-mod-empty'),GOCACHE=str(output/'go-cache'),

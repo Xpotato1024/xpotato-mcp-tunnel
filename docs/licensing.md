@@ -37,12 +37,12 @@ tools/list に案内を含め、読み取り専用の `xpotato_tunnel_source` �
 
 | 対象 | 固定版・結合方法 | この core 配布での扱い |
 | --- | --- | --- |
-| Go toolchain / 標準ライブラリ | Go 1.27.2、標準コードを実行ファイルにリンク | BSD-3-Clause / PATENTS を通知。コンパイラは同梱しない |
+| Go toolchain / 標準ライブラリ | Go 1.27.3、標準コードを実行ファイルにリンク | BSD-3-Clause / PATENTS を通知。コンパイラは同梱しない |
 | x/sys / x/term / godbus/dbus/v5 | v0.49.0 / v0.47.0 / v5.2.2、Go link（dbus は Linux） | 元の BSD 条件・帰属を維持。対応ソース bundle の vendor に含める |
 | 当プロジェクトの stdio / activity / licensing adapter | core に embed、準備した Node プロセスで実行 | AGPL-3.0-only。MCP SDK の公開 handler API を利用 |
 | Desktop Commander | `@wonderwhy-er/desktop-commander@0.2.52`、npm integrity を package-lock に固定 | Setup が registry から別取得。MIT。Chrome の起動前ダウンロード呼出を抑止するローカル改変あり。元の MIT 表示を保持 |
 | Commander の推移依存 | 同梱 package-lock の正確な各 package/version/resolved/integrity | core ZIP/source bundle に依存実体を含めない。Node と同じ別プロセス内で動作。各 MIT/ISC/BSD/Apache/LGPL 等の条件を維持 |
-| Node | 24.14.0、固定 URL・SHA256、別取得・別プロセス | Node の MIT と同梱第三者条件を維持 |
+| Node | 24.22.1、固定 URL・SHA256、別取得・別プロセス | Node の MIT と同梱第三者条件を維持 |
 | OpenAI tunnel-client-runtime | 0.0.16、固定 URL・SHA256、別取得・別プロセス、MCP stdio を接続 | 本体 Apache-2.0、NOTICE と同梱依存の条件を維持 |
 | Linux の glibc / loader | 利用先 OS の共有ライブラリ | core に同梱しない。完全静的バイナリとは案内しない |
 
@@ -70,12 +70,12 @@ AGPL に上書きしません。runtime の事前同梱・再配布は今回の�
 
 ## 対応ソースを作る（公開・tag push は行わない）
 
-clean な対象 commit・Go 1.27.2・Python 3.12 以上で、`python scripts/package-source.py --output dist/source`
+clean な対象 commit・Go 1.27.3・Python 3.12 以上で、`python scripts/package-source.py --output dist/source`
 を実行します。Git 追跡対象と `go mod vendor` による実際の Go build 依存・元の通知を
 まとめ、provenance と各ファイル SHA256 を加えます。秘密設定や runtime の取得済み実体は
 含めません。一般用コンパイラ・OS library は含めません。生成物は二度作成して一致を検証します。
 
-展開した source bundle では Go 1.27.2 を使用し、provenance に記載の commit を使って
+展開した source bundle では Go 1.27.3 を使用し、provenance に記載の commit を使って
 以下のようにビルドします（例はシェル。Windows では出力名に `.exe` を付けます）。
 
 ```sh

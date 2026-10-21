@@ -5,8 +5,8 @@ The Go executable incorporates the following components. Their copyright,
 license conditions and disclaimers are reproduced below. The shared Go BSD
 license text applies separately to each listed Go component.
 
-* Go 1.27.2 standard library/runtime (BSD-3-Clause)
-  https://go.googlesource.com/go/+/refs/tags/go1.27.2/LICENSE
+* Go 1.27.3 standard library/runtime (BSD-3-Clause)
+  https://go.googlesource.com/go/+/refs/tags/go1.27.3/LICENSE
 * golang.org/x/sys v0.49.0 (BSD-3-Clause)
   https://go.googlesource.com/sys/+/refs/tags/v0.49.0/LICENSE
 * golang.org/x/term v0.47.0 (BSD-3-Clause)
@@ -108,8 +108,8 @@ does not contain Node, Desktop Commander, Tunnel, npm packages, or their binary
 dependencies. Those components have their own licenses; this project's license
 does not replace them. Refer to upstream license/notice/source materials:
 
-* Node v24.14.0: MIT and bundled third-party licenses
-  https://github.com/nodejs/node/blob/v24.14.0/LICENSE
+* Node v24.22.1: MIT and bundled third-party licenses
+  https://github.com/nodejs/node/blob/v24.22.1/LICENSE
 * @wonderwhy-er/desktop-commander v0.2.52: MIT
   https://www.npmjs.com/package/@wonderwhy-er/desktop-commander/v/0.2.52
   https://github.com/wonderwhy-er/DesktopCommanderMCP/blob/v0.2.52/LICENSE

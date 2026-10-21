@@ -11,7 +11,7 @@ Tauri 2 の薄い UI と既存 Go core の限定 pipe bridge です。
 
 ## 開発者用ビルド
 
-Go 1.27.2、Rust 1.94.1、Python 3.12+ と各 OS の Tauri build prerequisites が必要です。
+Go 1.27.3、Rust 1.94.1、Python 3.12+ と各 OS の Tauri build prerequisites が必要です。
 利用者に Go/Rust/Node/npm の事前準備を求めるものではありません。
 clean な commit から native core を作り、`scripts/prepare-gui.py --core PATH --target TARGET_TRIPLE` で同梱 sidecar を用意します。
 `XPOTATO_BUILD_COMMIT` にその commit、`XPOTATO_BUILD_CLEAN=1` を設定して次を実行します。

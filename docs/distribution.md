@@ -32,7 +32,7 @@ v0.2.9は起動ログ設定を修正した新しい版です。生成名はコ�
 
 ## ローカルで候補を作る（公開なし）
 
-作業をcommitし、cleanなcheckoutで、対象OSのamd64用Go 1.27.2とPython 3.10以上を使います。利用者側にはどちらも不要です。`dist`はGit管理外です。実端末のsetup/start/updateは実行しません。
+作業をcommitし、cleanなcheckoutで、対象OSのamd64用Go 1.27.3とPython 3.10以上を使います。利用者側にはどちらも不要です。`dist`はGit管理外です。実端末のsetup/start/updateは実行しません。
 
 ```text
 go test -count=1 ./...
@@ -60,7 +60,7 @@ python3 scripts/package-review.py --binary dist/xpotato-tunnel --output dist/pac
 
 archiveはファイル順、commit日時、権限、tar所有者、gzipヘッダーとbuild-info先頭の表示パスを固定します。CIは同じソースのnative buildを2回行ってbinaryを比較し、Release archiveも別出力先へ2回組み立ててbyte一致を確認します。異なるPython/zlibやGo toolchainまでのbyte一致を保証する署名・証明ではありません。再組立にはRelease本文のsource commit・CIと同じtoolchainを使い、既存Releaseのassetは上書きしません。
 
-ソースから再ビルドする場合は`git clone --no-tags`した独立checkoutでRelease本文の完全commitをcheckoutします。CIと同じGo 1.27.2、`CGO_ENABLED=1`、`GOAMD64=v1`と`-trimpath`を使い、同梱build-infoも確認します。tagの有無でGoのmain-module版情報が変わり得るため、同じtreeだけでなくGit履歴・tag状態も揃えます。正式配布には検証済みCIの`release-candidate-...` artifact内のarchiveをそのまま使い、再ビルドで置き換えません。
+ソースから再ビルドする場合は`git clone --no-tags`した独立checkoutでRelease本文の完全commitをcheckoutします。CIと同じGo 1.27.3、`CGO_ENABLED=1`、`GOAMD64=v1`と`-trimpath`を使い、同梱build-infoも確認します。tagの有無でGoのmain-module版情報が変わり得るため、同じtreeだけでなくGit履歴・tag状態も揃えます。正式配布には検証済みCIの`release-candidate-...` artifact内のarchiveをそのまま使い、再ビルドで置き換えません。
 
 ActionsのWindows artifactは`content`を直接ZIP化するため二重包装になりません。GitHubが作るZIPのbyte列はローカルRelease候補ZIPと異なるので、外側ZIPのhashを混同しないでください。artifactは14日期限です。長期配布には別途本人によるRelease判断が必要です。
 

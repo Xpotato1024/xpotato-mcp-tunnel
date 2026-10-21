@@ -31,7 +31,7 @@ stub は実装ではなく、対応 target の依存として使われると必�
 
 ## 維持者の生成手順
 
-clean な対象 commit、Go 1.27.2、Rust 1.94.1、Python 3.12+ を用意します。取得と vendor 生成にはネットワークが必要です。
+clean な対象 commit、Go 1.27.3、Rust 1.94.1、Python 3.12+ を用意します。取得と vendor 生成にはネットワークが必要です。
 CI の共通 source job は Linux 上で１回生成し、同じ archive を Windows/Linux 両方の再構築検査へ渡します。
 
 ```sh
@@ -51,7 +51,7 @@ Go core のみの従来 source は `--profile core`（既定）で作れます�
 
 ## 空の依存 cache からの offline 再構築
 
-対象 OS の native Go 1.27.2/Rust 1.94.1 と compiler/linker・OS library・SDK を事前に用意します。
+対象 OS の native Go 1.27.3/Rust 1.94.1 と compiler/linker・OS library・SDK を事前に用意します。
 Windows は MSVC/Windows SDK、Ubuntu は GUI README の GTK/WebKitGTK 等が必要です。これらの一般ツール/OS 部品自体は source bundle に含めません。
 新しい directory へ source archive を展開し、その root で実行します。
 
