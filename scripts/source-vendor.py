@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import tarfile
 import urllib.request
-from source_policy import ROOT, profile, graph, harden_stubs, audit_vendor
+from source_policy import ROOT, profile, graph, harden_stubs, audit_vendor, normalize_readmes
 
 def install_tool(output):
     pin=profile('windows-linux')['filterer'];version=pin['version']
@@ -33,12 +33,14 @@ def vendor(root, profile_name, tool):
     subprocess.run([*command,'gui/vendor'],cwd=root,check=True)
     if lock.read_bytes()!=original:raise ValueError('filterer changed the locked dependency graph')
     harden_stubs(root)
+    readme_aliases=normalize_readmes(root)
     (root/'.cargo').mkdir(exist_ok=True)
     (root/'.cargo/config.toml').write_text('[net]\noffline = true\n[source.crates-io]\nreplace-with = "vendored-sources"\n[source.vendored-sources]\ndirectory = "gui/vendor"\n',encoding='utf-8',newline='\n')
     after=graph(root,policy)
     if before!={(p['name'],p['version']) for p in after.values()}:raise ValueError('active graph changed during filtering')
     report=audit_vendor(root,policy)
     report['filterer']=policy['filterer']
+    report['identicalReadmeAliases']=readme_aliases
     (root/'SOURCE-FILTERING.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8',newline='\n')
     # Preserve the complete license/NOTICE texts of all actual build dependencies.
     spec=importlib.util.spec_from_file_location('gui_notices',root/'scripts/gui-notices.py')

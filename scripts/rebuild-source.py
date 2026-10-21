@@ -19,7 +19,9 @@ def verify_source(root):
         expected[name]=checksum
     actual={p.relative_to(root).as_posix():p for p in root.rglob('*') if p.is_file()}
     if any(p.is_symlink() for p in root.rglob('*')):raise ValueError('source symlink rejected')
-    if set(actual)!=(set(expected)|{'SOURCE-SHA256SUMS'}):raise ValueError('source inventory changed; use a separate fork build/provenance')
+    if set(actual)!=(set(expected)|{'SOURCE-SHA256SUMS'}):
+        missing=sorted(set(expected)-set(actual));extra=sorted(set(actual)-set(expected)-{'SOURCE-SHA256SUMS'})
+        raise ValueError(f'source inventory changed; missing={missing[:8]} extra={extra[:8]}; use a separate fork build/provenance')
     for name,checksum in expected.items():
         if digest(actual[name])!=checksum:raise ValueError('source changed: '+name)
 

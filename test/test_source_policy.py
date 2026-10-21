@@ -121,6 +121,49 @@ class SourcePolicyTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'bytecode'):
                 source.pack(root/'source',root/'fixture.tar.gz',1792392030)
 
+    def readme_fixture(self,root):
+        directory=root/'gui/vendor/example-1.0.0';directory.mkdir(parents=True)
+        (directory/'Cargo.toml').write_text('[package]\nname="example"\nversion="1.0.0"\nreadme="README.md"\n')
+        return directory
+
+    def test_readme_alias_uses_manifest_spelling_without_losing_bytes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);directory=self.readme_fixture(root)
+            (directory/'Readme.md').write_bytes(b'complete upstream documentation')
+            self.update_checksums(directory)
+            report=policy.normalize_readmes(root)
+            self.assertEqual(report[0]['identicalAliases'],['Readme.md'])
+            self.assertEqual((directory/'README.md').read_bytes(),b'complete upstream documentation')
+            self.assertIn('README.md',policy.files(directory))
+            policy.checksum_files(directory,json.loads((directory/'.cargo-checksum.json').read_text()))
+
+    @unittest.skipIf(os.name=='nt','case-sensitive source producer regression')
+    def test_identical_readme_aliases_are_preserved_once_but_different_content_fails(self):
+        for same in (True,False):
+            with self.subTest(same=same),tempfile.TemporaryDirectory() as temp:
+                root=Path(temp);directory=self.readme_fixture(root)
+                (directory/'README.md').write_bytes(b'upstream docs')
+                (directory/'Readme.md').write_bytes(b'upstream docs' if same else b'other docs')
+                self.update_checksums(directory)
+                if not same:
+                    with self.assertRaisesRegex(ValueError,'different README'):policy.normalize_readmes(root)
+                else:
+                    policy.normalize_readmes(root)
+                    self.assertEqual(set(policy.files(directory)),{'Cargo.toml','README.md','.cargo-checksum.json'})
+                    policy.checksum_files(directory,json.loads((directory/'.cargo-checksum.json').read_text()))
+
+    def test_unknown_file_or_directory_case_collisions_are_rejected(self):
+        for names in (['src/Code.rs','src/code.rs'],['Dir/a','dir/b']):
+            with self.subTest(names=names),self.assertRaisesRegex(ValueError,'case-colliding'):policy.portable_paths(names)
+        policy.portable_paths(['src/a.rs','src/b.rs'])
+
+    def test_readme_normalization_never_rehashes_unverified_changed_content(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);directory=self.readme_fixture(root)
+            readme=directory/'Readme.md';readme.write_bytes(b'original docs')
+            self.update_checksums(directory);readme.write_bytes(b'changed docs')
+            with self.assertRaisesRegex(ValueError,'checksum mismatch'):policy.normalize_readmes(root)
+
     @unittest.skipUnless(os.name=='nt','explicit Windows file API path form')
     def test_long_paths_are_included_without_changing_os_policy(self):
         with tempfile.TemporaryDirectory() as temp:

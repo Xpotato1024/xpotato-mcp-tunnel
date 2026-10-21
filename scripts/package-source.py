@@ -14,7 +14,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
-from source_policy import long_path
+from source_policy import long_path, portable_paths
 
 def run(*args):
     return subprocess.check_output(args, cwd=ROOT)
@@ -24,6 +24,7 @@ def pack(content, archive, epoch):
     if any((content/'scripts').rglob('__pycache__')):
         raise ValueError('generated script bytecode must not enter corresponding source')
     files = sorted(p for p in content.rglob('*') if p.is_file())
+    portable_paths(p.relative_to(content).as_posix() for p in files)
     if any(p.is_symlink() for p in content.rglob('*')):
         raise ValueError('source bundle must contain no symlinks')
     checksums = ''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(content).as_posix()}\n'

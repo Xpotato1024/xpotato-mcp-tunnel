@@ -70,3 +70,12 @@ Mac/別 target をこの source profile で認証済みと扱わず、script は
 
 Mac の共通コードと native CI は維持しますが、この段階の workflow は Mac の DMG・全 platform vendor source を候補 artifact にしません。
 旧 head の unfiltered source/Mac review artifact は旧設計の証拠で、今回の段階公開には使いません。
+
+## Windows にも展開できるファイル名
+
+`static_vcruntime 3.0.0` の上流 source には、内容が同一の `README.md` と `Readme.md` が含まれます。
+Linux でそのまま梱包すると Windows の通常の filesystem では同じ名前として扱われ、inventory が一致しません。
+生成処理は manifest が指定する表記へ README の同一内容を一度だけ保持し、元の別名・SHA を
+`SOURCE-FILTERING.json` の `identicalReadmeAliases` に記録します。実装・license の内容と registry pin は変更しません。
+対応する vendor file checksum は更新します。内容が異なる README、その他の file/directory の大小文字衝突は拒否します。
+これは配布 source の可搬性処理であり、Windows の filesystem/権限設定は変更しません。

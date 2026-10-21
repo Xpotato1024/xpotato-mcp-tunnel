@@ -4,6 +4,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import subprocess
 import tomllib
@@ -65,6 +66,42 @@ def files(directory):
         if p.is_symlink():raise ValueError('source tree contains symlink')
         if p.is_file():result[p.relative_to(directory).as_posix()]=p
     return result
+
+def portable_paths(names):
+    """Reject case-only file or directory aliases before a Windows extraction."""
+    seen={}
+    for name in names:
+        parts=PurePosixPath(name).parts
+        for i in range(1,len(parts)+1):
+            prefix='/'.join(parts[:i]);folded=prefix.casefold()
+            if folded in seen and seen[folded]!=prefix:raise ValueError('case-colliding source paths: '+seen[folded]+' / '+prefix)
+            seen[folded]=prefix
+
+def normalize_readmes(root):
+    """Keep identical README bytes once at the manifest spelling; never alter code."""
+    records=[]
+    for directory in sorted((root/'gui/vendor').iterdir()):
+        manifest=tomllib.loads((directory/'Cargo.toml').read_text(encoding='utf-8'))
+        canonical=manifest['package'].get('readme')
+        if not isinstance(canonical,str) or not re.fullmatch(r'readme(?:\.[a-z0-9]+)?',canonical,re.I):continue
+        candidates=[p for p in directory.iterdir() if p.is_file() and p.name.casefold()==canonical.casefold()]
+        aliases=sorted(p.name for p in candidates if p.name!=canonical)
+        if not aliases:continue
+        checks_path=directory/'.cargo-checksum.json';checks=json.loads(checks_path.read_text(encoding='utf-8'))
+        checksum_files(directory,checks)
+        hashes={digest(p) for p in candidates}
+        if len(hashes)!=1:raise ValueError('different README bytes at case-colliding paths: '+directory.name)
+        checksum=hashes.pop();exact=next((p for p in candidates if p.name==canonical),None)
+        for path in candidates:
+            if path.name==canonical:continue
+            if exact is None:path.rename(directory/canonical);exact=directory/canonical
+            else:path.unlink()
+        for alias in aliases:checks['files'].pop(alias)
+        checks['files'][canonical]=checksum
+        checks_path.write_text(json.dumps(checks,sort_keys=True)+'\n',encoding='utf-8',newline='\n')
+        records.append(dict(package=manifest['package']['name'],version=manifest['package']['version'],
+            canonical=canonical,identicalAliases=aliases,sha256=checksum))
+    return records
 
 def checksum_files(directory, checksums):
     actual=files(directory)
