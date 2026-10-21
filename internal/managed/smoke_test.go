@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Xpotato1024/xpotato-mcp-tunnel/internal/licensing"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,6 +67,16 @@ func TestManagedInstallSmoke(t *testing.T) {
 	searchRoot := filepath.Join(home, "search-fixture")
 	os.MkdirAll(searchRoot, 0700)
 	os.WriteFile(filepath.Join(searchRoot, "needle.txt"), []byte("fixture_unique_search_7d19\n"), 0600)
+	imagePath := filepath.Join(searchRoot, "image-fixture.png")
+	var imageBytes bytes.Buffer
+	fixtureImage := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	fixtureImage.Set(0, 0, color.RGBA{R: 255, A: 255})
+	if e = png.Encode(&imageBytes, fixtureImage); e != nil {
+		t.Fatal(e)
+	}
+	if e = os.WriteFile(imagePath, imageBytes.Bytes(), 0600); e != nil {
+		t.Fatal(e)
+	}
 	configDir := filepath.Join(profile, ".claude-server-commander")
 	os.MkdirAll(configDir, 0700)
 	os.MkdirAll(filepath.Join(profile, "Temp"), 0700)
@@ -136,9 +149,15 @@ func TestManagedInstallSmoke(t *testing.T) {
 	if e = rgProbe.Run(); e != nil {
 		t.Fatal("locked package ripgrep binary unavailable")
 	}
+	sharpProbe := exec.Command(node, "--input-type=module", "-e", `import {createRequire} from 'node:module'; const require=createRequire(process.cwd()+'/node_modules/@wonderwhy-er/desktop-commander/dist/index.js'); const sharp=require('sharp'); if(sharp.versions.sharp!=='0.35.5') throw Error('patched Sharp missing'); const input=await sharp({create:{width:2,height:1,channels:4,background:{r:255,g:0,b:0,alpha:1}}}).png().toBuffer(); const output=await sharp(input).resize(1,1).webp().toBuffer(); const metadata=await sharp(output).metadata(); if(metadata.width!==1||metadata.height!==1||metadata.format!=='webp') throw Error('Sharp native processing failed');`)
+	sharpProbe.Dir = dir
+	sharpProbe.Env = append(cleanEnv(os.Environ(), "PATH", "NODE_OPTIONS", "NODE_PATH", "OPENAI_API_KEY", "CONTROL_PLANE_API_KEY"), "PATH=")
+	if e = sharpProbe.Run(); e != nil {
+		t.Fatal("patched Sharp native image processing failed")
+	}
 	search := request(3, "tools/call", map[string]any{"name": "start_search", "arguments": map[string]any{"path": searchRoot, "pattern": "fixture_unique_search_7d19", "searchType": "content", "literalSearch": true, "maxResults": 10, "timeout_ms": 5000}})
 	var toolResult struct {
-		Content []struct{ Text string }
+		Content []struct{ Text, Type, Data, MimeType string }
 		IsError bool `json:"isError"`
 	}
 	if json.Unmarshal(search["result"], &toolResult) != nil || toolResult.IsError {
@@ -172,6 +191,20 @@ func TestManagedInstallSmoke(t *testing.T) {
 		t.Fatal("hermetic search did not return fixture content")
 	}
 	t.Log("functional content search succeeded with PATH empty and locked package rg")
+	imageResult := request(1001, "tools/call", map[string]any{"name": "read_file", "arguments": map[string]any{"path": imagePath}})
+	if json.Unmarshal(imageResult["result"], &toolResult) != nil || toolResult.IsError {
+		t.Fatal("Commander synthetic image read failed")
+	}
+	imageReturned := false
+	for _, item := range toolResult.Content {
+		if item.Type == "image" && item.MimeType == "image/png" && item.Data != "" {
+			imageReturned = true
+		}
+	}
+	if !imageReturned {
+		t.Fatal("Commander did not return the synthetic PNG through its image path")
+	}
+	t.Log("patched Sharp native processing and pinned Commander synthetic PNG read succeeded")
 	cmd.Process.Kill()
 	cmd.Wait() // Join stderr copying before examining the display buffer.
 	if !strings.Contains(activity.String(), "\x1b[36m[RUN]\x1b[0m [MCP #1] start_search 処理開始") || !strings.Contains(activity.String(), "start_search 応答成功") {

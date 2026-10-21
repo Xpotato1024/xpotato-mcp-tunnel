@@ -32,9 +32,9 @@ import (
 var assets embed.FS
 
 const nodeVersion = "24.22.1"
-const commanderVersion = "0.2.52"
+const commanderVersion = "0.3.0"
 const tunnelVersion = "0.0.16"
-const dependencyLockSHA = "06352879b7d050b22e8f028396805675df39be8ec13ef507896000573e1e219f"
+const dependencyLockSHA = "93a8d74e55dc343752a47cac8e8199c9b4bdd12e9bfe5b966a39f10571d2b4df"
 
 type Manifest struct{ Platform, NodeURL, NodeSHA, TunnelURL, TunnelSHA, ExecutableSHA string }
 
@@ -442,7 +442,7 @@ func (manager Manager) populateRuntime(ctx context.Context, stage string, m Mani
 		return e
 	}
 	os.Remove(archive)
-	if e = os.WriteFile(filepath.Join(stage, "package.json"), []byte(`{"private":true,"name":"xpotato-managed-runtime","version":"1.0.0","dependencies":{"@wonderwhy-er/desktop-commander":"0.2.52"}}`), 0600); e != nil {
+	if e = os.WriteFile(filepath.Join(stage, "package.json"), []byte(`{"private":true,"name":"xpotato-managed-runtime","version":"1.0.0","dependencies":{"@wonderwhy-er/desktop-commander":"0.3.0"}}`), 0600); e != nil {
 		return e
 	}
 	dependencyLock, _ := assets.ReadFile("assets/package-lock.json")

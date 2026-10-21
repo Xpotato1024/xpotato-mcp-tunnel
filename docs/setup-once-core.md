@@ -80,7 +80,7 @@ Setup は途中状態を保持します。保存を断ったり、ネットワ�
 | `rollback` | 候補0.2.10では保存済みの前core/runtimeの組へ戻す。現管理coreが全検証できる互換runtimeに限る |
 | `plugin` | 登録用情報／指定済み直接 MCP endpoint の bundle を再生成 |
 
-固定依存はNode24.14.0、Tunnel runtime0.0.16、Desktop Commander0.2.52です。`internal/managed/assets/package-lock.json`を埋め込み、runtime内のnpm ci --ignore-scriptsで推移依存を固定します。rootの旧npm入口とは別です。ripgrepとOS別binaryもlockに含み、Chrome自動取得抑止は保持します。
+固定依存はNode24.22.1、Tunnel runtime0.0.16、Desktop Commander0.3.0です。`internal/managed/assets/package-lock.json`を埋め込み、runtime内のnpm ci --ignore-scriptsで推移依存を固定します。rootの旧npm入口とは別です。ripgrepとOS別binaryもlockに含み、Chrome自動取得抑止は保持します。
 
 更新は、取得したレビュー済み新パッケージの `./xpotato-tunnel update`（Windows は `.\xpotato-tunnel.exe update`）を本人が明示実行します。稼働中の接続は再起動しません。Startでnpm/Git／パッケージ取得や背景の自動更新は行いません。候補0.2.10は新coreを先に検証し、同じ依存内容のruntimeを全検証して再利用できます。初回の短縮コマンド移行は旧coreへのfallbackを先に保存し、最後にcore/runtime参照を一つのdevice.jsonで切り替えます。失敗・取消・強制終了後は同じupdateで再開します。旧版と設定を保持し、同じcore版の異なるbytesは上書きしません。[候補の設計と制約](update-transactions.md)も参照してください。
 

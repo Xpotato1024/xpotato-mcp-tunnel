@@ -110,9 +110,9 @@ does not replace them. Refer to upstream license/notice/source materials:
 
 * Node v24.22.1: MIT and bundled third-party licenses
   https://github.com/nodejs/node/blob/v24.22.1/LICENSE
-* @wonderwhy-er/desktop-commander v0.2.52: MIT
-  https://www.npmjs.com/package/@wonderwhy-er/desktop-commander/v/0.2.52
-  https://github.com/wonderwhy-er/DesktopCommanderMCP/blob/v0.2.52/LICENSE
+* @wonderwhy-er/desktop-commander v0.3.0: MIT
+  https://www.npmjs.com/package/@wonderwhy-er/desktop-commander/v/0.3.0
+  https://github.com/wonderwhy-er/DesktopCommanderMCP/blob/v0.3.0/LICENSE
 * OpenAI Tunnel v0.0.16: Apache-2.0, Copyright 2026 OpenAI
   https://github.com/openai/tunnel-client/releases/tag/v0.0.16
   See that release's license, notices, SPDX inventory and source archive.
@@ -125,7 +125,7 @@ requires a full transitive-license and corresponding-source review first.
 
 Desktop Commander modification and MIT license
 ---------------------------------------------
-The core's runtime preparation changes the pinned Desktop Commander 0.2.52
+The core's runtime preparation changes the pinned Desktop Commander 0.3.0
 dist/index.js by replacing its single reviewed background Chrome startup call
 with the "xpotato: startup Chrome check/download/cache cleanup suppressed."
 comment. This disables that startup Chrome check/download/cache cleanup; it
@@ -134,7 +134,7 @@ The original dependency package and its license files remain in the separately
 downloaded runtime. The stdio/activity adapters are separate project code.
 
 The following MIT text is reproduced from the pinned upstream LICENSE:
-https://github.com/wonderwhy-er/DesktopCommanderMCP/blob/v0.2.52/LICENSE
+https://github.com/wonderwhy-er/DesktopCommanderMCP/blob/v0.3.0/LICENSE
 
 MIT License
 

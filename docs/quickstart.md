@@ -10,7 +10,7 @@ v0.2.10は更新時の完全検証の重複を減らし、core/runtimeの切替�
 
 WindowsのLaptopには **Windows amd64版の`xpotato-tunnel.exe`と同じ配布物のガイド** を取得します。Linux用、GitHubの「Source code」、旧npm/npx CLIは選びません。Go/Node/npmを別途入れる必要はありません。ARM64は対象外です。
 
-`setup`/`update`はNode 24.14.0、Commander 0.2.52、Tunnel 0.0.16と固定lockの依存を取得します。初回はnodejs.org、GitHub Releasesとその配信先、registry.npmjs.orgへのHTTPS接続が必要です。完全オフライン用パッケージではありません。起動時にもOpenAIへの外向きHTTPSが必要です。
+`setup`/`update`はNode 24.22.1、Commander 0.3.0、Tunnel 0.0.16と固定lockの依存を取得します。初回はnodejs.org、GitHub Releasesとその配信先、registry.npmjs.orgへのHTTPS接続が必要です。完全オフライン用パッケージではありません。起動時にもOpenAIへの外向きHTTPSが必要です。
 
 1. [固定Release v0.2.10](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.10)を開きます。公開後はGitHubログイン不要です。
 2. WindowsはRelease本文の検証ブロック一回で、正しいZIPの取得・digest照合・展開まで行います。下の説明を確認してください。
