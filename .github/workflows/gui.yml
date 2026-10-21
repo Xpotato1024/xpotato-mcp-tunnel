@@ -16,7 +16,7 @@ jobs:
     name: GUI / ${{ matrix.platform }}
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 4 # Independent hosted runners; local measurement host is idle.
       matrix:
         include:
           - os: windows-2025
@@ -91,6 +91,10 @@ jobs:
         run: |
           npm install --prefix .local/gui-tests --ignore-scripts --no-audit --no-fund playwright@1.58.2
           XPOTATO_PLAYWRIGHT_MODULE="$PWD/.local/gui-tests/node_modules/playwright" node --test test/gui.test.cjs
+      - name: Native WebView and Go bridge smoke (hosted, no credentials)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: XPOTATO_PLAYWRIGHT_MODULE="$PWD/.local/gui-tests/node_modules/playwright" node --test test/gui-native.test.cjs
       - name: Native review package with full license text
         shell: bash
         run: |
@@ -130,5 +134,6 @@ jobs:
             dist/installer/*.sha256
             dist/source/*.tar.gz
             dist/source/*.sha256
+            dist/gui-native-ready.png
           if-no-files-found: error
           retention-days: 14
