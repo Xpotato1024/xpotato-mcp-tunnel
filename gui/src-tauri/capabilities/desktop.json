@@ -1,0 +1,6 @@
+{
+  "identifier": "desktop",
+  "description": "Only the bundled main window can use finite maintenance commands. No shell, filesystem, network, updater or credential plugin API.",
+  "windows": ["main"],
+  "permissions": ["allow-poll", "allow-operate", "allow-reply", "allow-cancel", "allow-request-close", "allow-pick-folder"]
+}

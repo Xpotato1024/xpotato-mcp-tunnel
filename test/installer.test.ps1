@@ -30,6 +30,19 @@ $core = Join-Path $installed 'xpotato-tunnel.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Installed payload invalid' }
 if ((Get-ItemProperty -LiteralPath $registration).DisplayVersion -ne $Version) { throw 'Registration mismatch' }
 if (Test-Path -LiteralPath $profile) { throw 'Installer unexpectedly created runtime/profile state' }
+$gui = Join-Path $installed 'xpotato-tunnel-app.exe'
+if (Test-Path -LiteralPath $gui) {
+    $guiInfo = & $gui --build-info | ConvertFrom-Json
+      if ($LASTEXITCODE -ne 0 -or $guiInfo.version -ne $Version -or $guiInfo.dirty -or $guiInfo.nativeFixture -cne $false) { throw 'GUI metadata mismatch' }
+    $menu = Join-Path ([Environment]::GetFolderPath('Programs')) 'Xpotato Tunnel\Xpotato Tunnel.lnk'
+    $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($menu)
+    if ($shortcut.TargetPath -ne $gui -or $shortcut.Arguments) { throw 'Start menu must open GUI directly' }
+    $originalGUI = [IO.File]::ReadAllBytes($gui)
+    try {
+        [IO.File]::WriteAllText($gui, 'fixture tampered GUI; never executed')
+        Run-Fixture $installer @('/S') $false
+    } finally { [IO.File]::WriteAllBytes($gui, $originalGUI) }
+}
 Run-Fixture $installer @('/S') $true
 if (-not (Test-Path -LiteralPath $foreignFile)) { throw 'Unrelated stage removed' }
 # A nonsecret synthetic wrapper record. No Setup/Vault/runtime is used.
@@ -72,6 +85,11 @@ if (-not (Test-Path -LiteralPath $wrapper) -or -not (Test-Path -LiteralPath $reg
 if ([IO.File]::ReadAllText($wrapper) -ne 'modified wrapper') { throw 'Modified wrapper contents changed' }
 [IO.File]::WriteAllText($wrapper, 'fixture wrapper, never executed')
 # Hold only our own core fixture open to simulate an in-use application file.
+if (Test-Path -LiteralPath $gui) {
+    $guiHandle = [IO.File]::Open($gui, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try { Run-Fixture $uninstallCopy $uninstallArgs $false } finally { $guiHandle.Dispose() }
+    if (-not (Test-Path -LiteralPath $gui) -or -not (Test-Path -LiteralPath $core) -or -not (Test-Path -LiteralPath $registration)) { throw 'In-use GUI state lost' }
+}
 $handle = [IO.File]::Open($core, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
 try { Run-Fixture $uninstallCopy $uninstallArgs $false } finally { $handle.Dispose() }
 if (-not (Test-Path -LiteralPath $core) -or -not (Test-Path -LiteralPath $registration)) { throw 'In-use program or registration lost' }

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Xpotato Tunnel",
+  "version": "0.2.11",
+  "identifier": "net.xpotato.tunnel",
+  "build": { "frontendDist": "../ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{ "label": "main", "title": "Xpotato Tunnel", "width": 940, "height": 760, "minWidth": 600, "minHeight": 540, "devtools": false }],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'",
+      "capabilities": ["desktop"]
+    }
+  },
+  "bundle": {
+    "active": false,
+    "externalBin": ["binaries/xpotato-tunnel"],
+    "shortDescription": "Private per-device Tunnel setup and maintenance",
+    "category": "Utility"
+  }
+}

@@ -10,6 +10,13 @@ ShowInstDetails show
 ShowUninstDetails show
 Var StagingDir
 Var PayloadFolder
+!ifdef GUI_SHA
+  !define ENTRY "xpotato-tunnel-app.exe"
+  !define ENTRY_ARGS ""
+!else
+  !define ENTRY "xpotato-tunnel.exe"
+  !define ENTRY_ARGS "maintenance"
+!endif
 !include "MUI2.nsh"
 !include "x64.nsh"
 !include "FileFunc.nsh"
@@ -35,6 +42,15 @@ Var PayloadFolder
     ${EndIf}
   ${EndIf}
 !macroend
+!macro CheckGUI failure
+!ifdef GUI_SHA
+  StrCpy $0 1
+  ClearErrors
+  ExecWait `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "try { if (([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([IO.File]::ReadAllBytes([IO.Path]::Combine([Environment]::GetFolderPath('LocalApplicationData'),'Programs\XpotatoTunnel\$PayloadFolder\xpotato-tunnel-app.exe')))) -replace '-','') -eq '${GUI_SHA}') { exit 0 }; exit 1 } catch { exit 1 }"` $0
+  IfErrors ${failure}
+  StrCmp $0 0 0 ${failure}
+!endif
+!macroend
 !macro CheckBase failure
   !insertmacro CheckDirectory "$LOCALAPPDATA" ${failure}
   !insertmacro CheckDirectory "$LOCALAPPDATA\Programs" ${failure}
@@ -53,9 +69,9 @@ Var PayloadFolder
 !macroend
 !define MUI_ABORTWARNING
 !define MUI_CUSTOMFUNCTION_ABORT CleanupStage
-!define MUI_FINISHPAGE_RUN "$INSTDIR\xpotato-tunnel.exe"
-!define MUI_FINISHPAGE_RUN_PARAMETERS "maintenance"
-!define MUI_FINISHPAGE_RUN_TEXT "Open Setup / Start / Update / Repair"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${ENTRY}"
+!define MUI_FINISHPAGE_RUN_PARAMETERS "${ENTRY_ARGS}"
+!define MUI_FINISHPAGE_RUN_TEXT "Open Xpotato Tunnel"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${PAYLOAD}\licenses\LICENSE"
 !insertmacro MUI_PAGE_INSTFILES
@@ -113,6 +129,7 @@ Section "Application"
   !include "install-files.nsh"
   IfErrors invalid
   !insertmacro CheckCore invalid
+  !insertmacro CheckGUI invalid
   StrCpy $0 1
   ; Extraction already checks container CRC; launch/version is the minimal
   ; post-extraction check. Do not reopen every doc/payload file here.
@@ -130,6 +147,7 @@ existing:
 check:
   StrCpy $PayloadFolder "${VERSION}"
   !insertmacro CheckCore invalid
+  !insertmacro CheckGUI invalid
   StrCpy $0 1
   ExecWait '"$INSTDIR\xpotato-tunnel.exe" version' $0
   IfErrors invalid
@@ -139,7 +157,7 @@ register:
   !insertmacro CheckDirectory "$SMPROGRAMS\Xpotato Tunnel" invalid
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\Xpotato Tunnel"
-  CreateShortcut "$SMPROGRAMS\Xpotato Tunnel\Xpotato Tunnel.lnk" "$INSTDIR\xpotato-tunnel.exe" "maintenance"
+  CreateShortcut "$SMPROGRAMS\Xpotato Tunnel\Xpotato Tunnel.lnk" "$INSTDIR\${ENTRY}" "${ENTRY_ARGS}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\XpotatoTunnel" "DisplayName" "Xpotato Tunnel ${VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\XpotatoTunnel" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\XpotatoTunnel" "Publisher" "Xpotato.net / Xpotato1024"

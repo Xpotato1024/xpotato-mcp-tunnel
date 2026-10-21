@@ -21,7 +21,7 @@ import (
 	"syscall"
 )
 
-const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64)
+const help = `xpotato-tunnel ` + core.Version + ` (Windows/Linux amd64; macOS amd64/arm64)
   setup [--env-file PATH] [--device NAME] [--tunnel-id ID] [--allow ABSOLUTE_DIR ...]
   maintenance | start | doctor [--deep] | update | repair | rollback | credentials | plugin
   package-check | uninstall-entrypoints (no credentials or runtime scan)
@@ -180,6 +180,9 @@ func parse(args []string) (string, core.Options, error) {
 	return command, o, nil
 }
 func run(args []string) (int, error) {
+	if len(args) == 1 && args[0] == "_gui-bridge" {
+		return guiBridge(os.Stdin, os.Stdout)
+	}
 	if len(args) > 0 && args[0] == "_dispatch" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()

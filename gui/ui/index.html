@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Xpotato Tunnel</title><link rel="stylesheet" href="app.css"><script src="app.js" defer></script></head>
+<body>
+<main>
+  <header><div class="brand" aria-hidden="true">X</div><div><h1>Xpotato Tunnel</h1><p>この端末の接続を、ひとつの場所から。</p></div><span id="version"></span></header>
+  <p id="platform-note" class="notice" role="status">同梱アプリを確認しています…</p>
+  <section class="panel" aria-labelledby="connect-title">
+    <div class="section-title"><h2 id="connect-title">接続</h2><span id="connection-status" class="badge">停止中</span></div>
+    <p>初めての端末は「初期設定」へ。許可するフォルダーと保存内容を確認してから進みます。</p>
+    <div class="actions"><button data-action="setup" class="primary">初期設定・設定変更</button><button data-action="start">接続を開始</button><button id="stop" disabled>このアプリの接続を停止</button></div>
+    <p class="hint">他のアプリや既存の接続は停止しません。アプリを閉じると、このアプリから開始した接続を終了します。</p>
+  </section>
+  <section class="panel" aria-labelledby="maint-title">
+    <div class="section-title"><h2 id="maint-title">更新と修復</h2><span id="maintenance-status" class="badge">待機中</span></div>
+    <p>更新は次の接続から適用します。通常の更新では保存済み runtime の全ファイルを走査しません。</p>
+    <div class="actions"><button data-action="update">この版で更新</button><button data-action="repair">runtime を再取得して修復</button><button data-action="doctor">簡易診断</button></div>
+    <p class="hint">新しいアプリの版は OS の Installer／パッケージ管理から入れ替えます。バックグラウンドの自動更新は行いません。</p>
+  </section>
+  <section id="interaction" class="panel prompt" hidden aria-labelledby="prompt-title">
+    <h2 id="prompt-title">確認</h2><pre id="prompt-details"></pre><p id="prompt-label"></p>
+    <form id="answer-form" autocomplete="off">
+      <label id="answer-label" for="answer">入力</label>
+      <div id="input-row" class="actions"><input id="answer" autocomplete="off" spellcheck="false" maxlength="8192"><button id="choose-folder" type="button">フォルダーを選ぶ</button><button id="send-answer" type="submit" class="primary">次へ</button></div>
+      <p id="secret-note" class="hint" hidden>この操作で同意した OS の資格情報ストアに保存します。入力値は画面の履歴やログに残しません。</p>
+      <div id="choice-buttons" class="actions"></div>
+    </form>
+  </section>
+  <section class="panel" aria-labelledby="progress-title">
+    <div class="section-title"><h2 id="progress-title">操作状況</h2><button id="cancel" disabled>操作を中断</button></div>
+    <p id="status" role="status" aria-live="polite">アプリの準備中です。</p><p id="elapsed" class="hint"></p>
+    <progress id="busy-progress" hidden aria-label="処理中"></progress>
+    <details><summary>進行の詳細</summary><pre id="activity"></pre></details>
+    <pre id="diagnosis" hidden></pre>
+  </section>
+  <details class="panel"><summary>詳細設定とアプリの削除</summary>
+    <div class="fields"><label for="home">プロファイル保存先</label><input id="home" spellcheck="false"><label for="device">端末名（空欄は既定の端末）</label><input id="device" maxlength="64" spellcheck="false" placeholder="work-pc"></div>
+    <div class="actions"><button data-action="credentials">キーを更新</button><button data-action="rollback">直前の runtime に戻す</button><button id="deep">全依存を診断…</button><button data-action="uninstall-entrypoints">削除の準備</button></div>
+    <p id="uninstall-note" class="hint"></p>
+    <p class="hint">全依存の診断だけは、再取得と全ファイル比較を伴う場合があります（最大10分）。通常の導入・更新では実行しません。</p>
+  </details>
+  <footer><span>プロファイル・キー・runtime はアプリの削除後も保持します。</span><button id="quit">アプリを終了</button></footer>
+</main>
+<dialog id="deep-dialog"><h2>全依存の診断</h2><p>再取得と全ファイル比較を行う重い診断です。通常の更新には必要ありません。実行中の接続は再起動しません。</p><div class="actions"><button id="deep-no" autofocus>戻る</button><button id="deep-yes">診断を実行</button></div></dialog>
+</body></html>

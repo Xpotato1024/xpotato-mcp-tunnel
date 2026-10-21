@@ -28,7 +28,12 @@ func prepare(cmd *exec.Cmd, _ time.Duration) (*control, error) {
 		windows.CloseHandle(job)
 		return nil, e
 	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_SUSPENDED}
+	hidden := cmd.SysProcAttr != nil && cmd.SysProcAttr.HideWindow
+	flags := uint32(windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_SUSPENDED)
+	if hidden {
+		flags |= windows.CREATE_NO_WINDOW
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: flags, HideWindow: hidden}
 	return &control{job: job}, nil
 }
 func (c *control) attach(cmd *exec.Cmd) error {

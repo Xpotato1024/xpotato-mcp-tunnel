@@ -1,0 +1,210 @@
+name: Desktop GUI candidates
+on:
+  pull_request:
+    branches: [main, feat/installer-lifecycle]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-gui-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  GOMAXPROCS: '2'
+  CARGO_BUILD_JOBS: '2'
+  MACOSX_DEPLOYMENT_TARGET: '13.5'
+jobs:
+  source:
+    name: Windows/Linux corresponding source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Fixed Rust toolchain and ephemeral tool prerequisites
+        run: |
+          rustup toolchain install 1.94.1 --profile minimal
+          rustup override set 1.94.1
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+      - run: python -m unittest discover -s test -p "test_*.py" -v
+      - name: Single target-profile source pipeline (no Apple binding implementation)
+        run: |
+          python scripts/source-vendor.py --install-tool dist/vendor-tool
+          python scripts/package-source.py --profile windows-linux --vendor-filterer "$PWD/dist/vendor-tool/bin/cargo-vendor-filterer" --output dist/source
+      - name: Source candidate for native offline rebuild gates
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: source-windows-linux-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            dist/source/*.tar.gz
+            dist/source/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+  native:
+    needs: source
+    name: GUI / ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4 # Independent hosted runners; local measurement host is idle.
+      matrix:
+        include:
+          - os: windows-2025
+            platform: windows-amd64
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
+          - os: ubuntu-24.04
+            platform: linux-amd64
+            target: x86_64-unknown-linux-gnu
+            suffix: ''
+          - os: macos-15-intel
+            platform: darwin-amd64
+            target: x86_64-apple-darwin
+            suffix: ''
+          - os: macos-15
+            platform: darwin-arm64
+            target: aarch64-apple-darwin
+            suffix: ''
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60 # Includes a second build from the delivered archive and empty caches.
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Target distribution policy (Mac remains build/test only)
+        id: distribution
+        shell: bash
+        run: python scripts/source_policy.py --target ${{ matrix.target }} --github-output "$GITHUB_OUTPUT"
+      - name: Ephemeral Linux build libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Fixed Rust toolchain (ephemeral runner only)
+        shell: bash
+        run: |
+          rustup toolchain install 1.94.1 --profile minimal
+          rustup override set 1.94.1
+      - name: Locked native dependency license preflight
+        shell: bash
+        run: python scripts/gui-notices.py --target ${{ matrix.target }} --output dist/gui-notices.txt
+      - name: Go lifecycle and pinned runtime smoke (no vault keys)
+        run: go test -p 2 -count=1 ./...
+        env:
+          XPOTATO_RUNTIME_SMOKE: '1'
+      - run: go vet -p 2 ./...
+      - name: Go race fixtures
+        if: runner.os != 'Windows'
+        run: go test -p 2 -race -count=1 ./internal/core ./internal/managed ./internal/processctrl ./cmd/xpotato-tunnel
+        env:
+          XPOTATO_RUNTIME_SMOKE: '0'
+      - run: python -m unittest discover -s test -p "test_*.py" -v
+      - name: Clean native sidecar and production GUI
+        shell: bash
+        run: |
+          mkdir -p dist
+          go build -trimpath -o dist/xpotato-tunnel${{ matrix.suffix }} ./cmd/xpotato-tunnel
+          python scripts/prepare-gui.py --core dist/xpotato-tunnel${{ matrix.suffix }} --target ${{ matrix.target }}
+      - name: Locked Rust tests and release build
+        shell: bash
+        run: |
+          cargo test --locked --release -j 2 --manifest-path gui/src-tauri/Cargo.toml
+          cargo build --locked --release -j 2 --manifest-path gui/src-tauri/Cargo.toml
+          gui/src-tauri/target/release/xpotato-tunnel-app${{ matrix.suffix }} --build-info
+          mkdir -p dist/gui-production
+          cp gui/src-tauri/target/release/xpotato-tunnel-app${{ matrix.suffix }} dist/gui-production/
+      - name: GUI browser fixtures (mock backend, sandbox enabled)
+        if: runner.os == 'Windows' || runner.os == 'Linux'
+        shell: bash
+        run: |
+          npm install --prefix .local/gui-tests --ignore-scripts --no-audit --no-fund playwright@1.58.2
+          XPOTATO_PLAYWRIGHT_MODULE="$PWD/.local/gui-tests/node_modules/playwright" node --test test/gui.test.cjs
+      - name: Native WebView and Go bridge smoke (hosted, no credentials)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # Separate target, never used by the native package or artifact glob.
+          CARGO_TARGET_DIR="$PWD/gui/src-tauri/target/native-fixture" cargo build --locked --release -j 2 --features native-fixture --manifest-path gui/src-tauri/Cargo.toml
+          XPOTATO_PLAYWRIGHT_MODULE="$PWD/.local/gui-tests/node_modules/playwright" node --test test/gui-native.test.cjs
+      - name: Native review package with full license text
+        if: steps.distribution.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          python scripts/package-review.py --binary dist/xpotato-tunnel${{ matrix.suffix }} --output dist/core --platform ${{ matrix.platform }}
+          python scripts/package-gui.py --content dist/core/content --gui dist/gui-production/xpotato-tunnel-app${{ matrix.suffix }} --notices dist/gui-notices.txt --output dist/gui --platform ${{ matrix.platform }}
+      - name: Pinned GUI NSIS candidate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python scripts/fetch-installer-tool.py --output dist/nsis-toolchain
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler acquisition failed' }
+          $pin = Get-Content installer/nsis-toolchain.json -Raw | ConvertFrom-Json
+          $tool = "dist/nsis-toolchain/nsis-$($pin.version)"
+          python scripts/package-installer.py --content dist/gui/content --output dist/installer --makensis "$tool/makensis.exe" --compiler-sha256 $pin.compilerSHA256 --nsis-license "$tool/COPYING"
+          if ($LASTEXITCODE -ne 0) { throw 'GUI installer compilation failed' }
+      - name: Isolated GUI installer lifecycle (hosted runner only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $info = Get-Content dist/gui/content/build-info.json -Raw | ConvertFrom-Json
+          ./test/installer.test.ps1 -InstallerPath "dist/installer/xpotato-tunnel-$($info.version)-windows-amd64-setup.exe" -Version $info.version
+      - name: Download the same filtered source archive on both native hosts
+        if: steps.distribution.outputs.eligible == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: source-windows-linux-${{ github.event.pull_request.head.sha || github.sha }}
+          path: dist/source-download
+      - name: Delivered source rebuild and tests (empty caches, Cargo frozen, Go proxy off)
+        if: steps.distribution.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          python scripts/check-source-bundle.py --archive "$(echo dist/source-download/*.tar.gz)" --target ${{ matrix.target }} --expected-commit ${{ github.event.pull_request.head.sha || github.sha }} --output dist/source-rebuild
+      - name: Upload candidates for review (no release, signing or deployment)
+        if: steps.distribution.outputs.eligible == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-${{ matrix.platform }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            dist/gui/*.deb
+            dist/gui/*.sha256
+            dist/installer/*-setup.exe
+            dist/installer/*.sha256
+            dist/source-rebuild/build/SOURCE-REBUILD-RESULT.json
+            dist/gui-native-ready.png
+          if-no-files-found: error
+          retention-days: 14
+
+  assemble:
+    name: Verified Windows/Linux release bundle
+    needs: [source, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist/desktop-input
+      - name: Verify one commit, source profile, rebuilds and eight public assets
+        run: python scripts/package-desktop-release.py --input dist/desktop-input --commit ${{ github.event.pull_request.head.sha || github.sha }} --ci-url https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} --output dist/desktop-release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-release-${{ github.event.pull_request.head.sha || github.sha }}
+          path: dist/desktop-release/*
+          if-no-files-found: error
+          retention-days: 14

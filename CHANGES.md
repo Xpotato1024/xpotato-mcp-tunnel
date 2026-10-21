@@ -11,7 +11,13 @@
 - Group packaged user docs and legal notices without losing source offers.
 - Windows/Linux Go fixtures and vet, Python packaging and NSIS compilation pass;
   exact-head CI, isolated installer lifecycle and common GUI remain under review.
-- Cross-platform GUI/distribution design records the macOS/ARM and signing gaps.
+- Add a shared Tauri GUI with a fixed-digest Go sidecar and private bounded IPC.
+  Keep storage consent, scope checks and runtime lifecycle in Go. Independent
+  connection/maintenance slots only cancel processes started by this app.
+- Add native macOS Intel/Apple Silicon runtime pins, Keychain, ownership locks
+  and process cleanup; package .app/DMG and Ubuntu 24.04 x64 .deb candidates.
+- Lock Cargo dependencies, ship full license notices and include Rust vendor
+  sources. Read-only native CI creates review artifacts without publishing.
 
 # 0.2.10 candidate — 2026-10-20
 

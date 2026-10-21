@@ -90,3 +90,16 @@ commit を使い、同じ `-X` で
 `github.com/Xpotato1024/xpotato-mcp-tunnel/internal/licensing.SourceRepository=https://github.com/OWNER/REPO`
 も指定し、その版の source bundle を提供します。dirty / VCS不明の開発ビルドは正確な公開
 ソースを保証せず、その旨を表示します。クリーンなビルドでも URL の公開到達性は別途検証が必要です。
+
+## GUI の依存と対応 source
+
+GUI は Rust 1.94.1 と Cargo.lock に固定する。配布候補の `licenses/GUI-THIRD-PARTY-LICENSES.txt` に各 crate の完全な LICENSE/COPYING/NOTICE を含める。
+crate が本文を欠く場合だけ `gui/licenses/overrides.json` の crate 名・版・source commit・本文 SHA を照合する。selectors の MPL 本文は Mozilla 公式標準テキストを使用する。
+
+Windows/Linux の段階公開用 GUI source は、[source distribution](source-distribution.md) の単一 profile/pipeline で生成します。
+元の Cargo.lock と共通 Go/GUI 実装を維持し、対象外の Apple SDK binding 実装を除外します。
+他 target の解決に必要な crate 名・feature 宣言は解決専用 stub として明示し、誤って使うと compile_error になります。
+実際に使う依存の全 source と license/NOTICE、Go vendor、build script、inventory/provenance を保持します。
+同じ archive を Windows/Linux の空 cache・Cargo --frozen・Go proxy off で再構築してから候補を受け入れます。
+旧 --rust-vendor による全 platform の取り込みは受け付けません。Mac は共通コードの build/test のみ継続し、配布候補を保留します。
+OS WebView/SDK/Rust/Go toolchain は一般ツール・OS 部品として別途用意し、利用者の秘密値・profile・取得済み runtime を対応 source に含めません。

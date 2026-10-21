@@ -32,6 +32,25 @@ func wizardText(p Prompt, label string) (string, error) {
 	return strings.TrimSpace(s), nil
 }
 
+func wizardChoice(p Prompt, label string, choices []PromptChoice) (string, error) {
+	if native, ok := p.(ChoicePrompt); ok {
+		value, err := native.Choose(label, choices)
+		if err != nil {
+			return "", err
+		}
+		if cancelled(value) {
+			return "", ErrSetupCancelled
+		}
+		for _, choice := range choices {
+			if value == choice.Value {
+				return value, nil
+			}
+		}
+		return "", ErrSetupCancelled
+	}
+	return wizardText(p, label)
+}
+
 // PrepareSetup collects only nonsecret options. It does not create files,
 // install a runtime, access the vault, or start/stop processes. Setup rechecks
 // identity, reviewed scope and state under its maintenance lock afterwards.
@@ -207,7 +226,10 @@ func (a App) PrepareSetup(o Options, out io.Writer, shortDefault string) (Option
 			fmt.Fprintln(out, "直接 MCP endpoint: 指定済み（値は表示しません）")
 		}
 		fmt.Fprintln(out, "キー保存先: Windows は本人の Credential Manager、Linux は本人の Secret Service。専用レコードへの保存は別途明示同意を求めます。")
-		choice, e := wizardText(a.Prompt, "進む yes / 端末名を修正 device / Tunnel ID を修正 tunnel / フォルダーを修正 dirs / 保存先を修正 home / 短縮コマンド先を修正 command / 中断 no または q")
+		choice, e := wizardChoice(a.Prompt, "進む yes / 端末名を修正 device / Tunnel ID を修正 tunnel / フォルダーを修正 dirs / 保存先を修正 home / 短縮コマンド先を修正 command / 中断 no または q", []PromptChoice{
+			{"yes", "内容を確認して進む"}, {"device", "端末名を変更"}, {"tunnel", "Tunnel ID を変更"},
+			{"dirs", "許可フォルダーを変更"}, {"home", "保存先を変更"}, {"command", "起動コマンドの場所を変更"}, {"no", "中断"},
+		})
 		if e != nil {
 			return o, e
 		}
@@ -286,7 +308,9 @@ func (a App) editRoots(o *Options, out io.Writer) error {
 	fmt.Fprintln(out, "許可フォルダーを編集します。1 回に 1 フォルダーを入力します。空白を含むパスもそのまま入力し、外側の引用符は不要です。")
 	for {
 		printRoots(out, o.Allow)
-		choice, e := wizardText(a.Prompt, "追加 add / 削除 remove / 一覧 review / 確定 done / 中断 q")
+		choice, e := wizardChoice(a.Prompt, "追加 add / 削除 remove / 一覧 review / 確定 done / 中断 q", []PromptChoice{
+			{"add", "フォルダーを追加"}, {"remove", "一覧から外す"}, {"review", "一覧を確認"}, {"done", "この範囲で確定"}, {"q", "中断"},
+		})
 		if e != nil {
 			return e
 		}

@@ -1,5 +1,20 @@
 # 配布候補と版付きRelease
 
+
+> v0.2.11 GUI の通常配布は Windows Installer / Ubuntu deb と Windows/Linux 共通 source です。以下の Go-only portable package の作成・履歴手順を GUI Release へそのまま使わないでください。
+
+## v0.2.11 desktop 配布の共通 pipeline
+
+`Desktop GUI candidates`（gui.yml）は PR と明示的な手動実行に同じ実装を使います。main へ採用した commit の手動 run で、source＋4 native target＋bundle照合がすべて成功したことを確認します。Mac は build/test のみ、配布 artifact は作りません。
+
+`desktop-release-COMMIT` artifact は、Windows Installer、Ubuntu deb、共通 source、各 `.sha256`、`SHA256SUMS.txt` と `release-provenance.json` の8ファイルだけを含みます。生成処理は同一 commit / source profile / 空cache再構築結果 / checksum を照合します。Go-only regression workflow の `core-only-*` artifact はこの Release の入力にしません。
+
+公開は自動化していません。明示承認された tag/Release 操作の前に、最終 main SHA・CI・版・8ファイルのdigestとsourceを揃えます。公開後は認証なしで配布物とchecksumを取得し、Release metadata、tag、採用 commit、公開bytesの一致を確認します。署名しない Windows Installer は未署名と明記します。既存tag/assetsを上書きしません。
+
+通常利用者の導入は [GUI lifecycle](gui-lifecycle.md)、source の対象と再構築は [source distribution](source-distribution.md) を参照してください。
+
+## Go-only portable package の開発・履歴
+
 > 次版候補: [Installer 設計と公開前の検証](installer-lifecycle.md)。公開済み v0.2.10 の asset/tag は変更しません。
 
 この手順は管理者向けです。利用者は[quickstart](quickstart.md)へ進みます。正式配布は[Release v0.2.10](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.10)です。CIは候補を作るだけで、push/PRからRelease、tag、deployを行いません。公開は本人の明示承認後に管理者が手動で行います。
