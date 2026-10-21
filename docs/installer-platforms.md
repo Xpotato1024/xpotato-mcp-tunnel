@@ -34,3 +34,8 @@ OS の権限・AV・PATH・サービス・自動起動を変更する工程は�
 具体的な利用手順と IPC は [GUI lifecycle](gui-lifecycle.md)、通常検査と修復 transaction は [installer lifecycle](installer-lifecycle.md)。
 
 一次資料: [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)、[macOS .app](https://v2.tauri.app/distribute/macos-application-bundle/)、[Debian](https://v2.tauri.app/distribute/debian/)。
+
+## 段階公開の対象
+
+現在の配布候補は Windows x64 / Ubuntu 24.04 x64 です。Mac は同じ共通実装の native build/test を維持し、公開候補の梱包/upload を保留します。
+単一 target profile から SDK binding 実装を除いた対応 source を生成し、両 native host で offline 再構築します。詳細は [source distribution](source-distribution.md) を参照してください。

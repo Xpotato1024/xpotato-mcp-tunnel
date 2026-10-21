@@ -96,11 +96,10 @@ commit を使い、同じ `-X` で
 GUI は Rust 1.94.1 と Cargo.lock に固定する。配布候補の `licenses/GUI-THIRD-PARTY-LICENSES.txt` に各 crate の完全な LICENSE/COPYING/NOTICE を含める。
 crate が本文を欠く場合だけ `gui/licenses/overrides.json` の crate 名・版・source commit・本文 SHA を照合する。selectors の MPL 本文は Mozilla 公式標準テキストを使用する。
 
-CI は `cargo vendor --locked --manifest-path gui/src-tauri/Cargo.toml dist/gui-vendor` を実行し、
-`python scripts/package-source.py --rust-vendor dist/gui-vendor --output dist/source` で Go/Rust 依存を含む対応 source を作る。
-OS WebView / SDK / Rust / Go toolchain 自体はこの source bundle に含めない。
-展開 source では前節の Go build に続き、対象 native triple の `gui/src-tauri/binaries/xpotato-tunnel-TARGET[.exe]` へ core をコピーする。
-provenance の commit を `XPOTATO_BUILD_COMMIT`、`XPOTATO_BUILD_CLEAN=1` に設定し、
-`cargo build --offline --locked --release --manifest-path gui/src-tauri/Cargo.toml` を実行する。
-同梱 .cargo/config.toml が vendored crates を使う。Mac/Linux の native prerequisites は GUI README を参照。
-利用者の秘密値やプロファイル、取得済み runtime を対応 source に含めない。
+Windows/Linux の段階公開用 GUI source は、[source distribution](source-distribution.md) の単一 profile/pipeline で生成します。
+元の Cargo.lock と共通 Go/GUI 実装を維持し、対象外の Apple SDK binding 実装を除外します。
+他 target の解決に必要な crate 名・feature 宣言は解決専用 stub として明示し、誤って使うと compile_error になります。
+実際に使う依存の全 source と license/NOTICE、Go vendor、build script、inventory/provenance を保持します。
+同じ archive を Windows/Linux の空 cache・Cargo --frozen・Go proxy off で再構築してから候補を受け入れます。
+旧 --rust-vendor による全 platform の取り込みは受け付けません。Mac は共通コードの build/test のみ継続し、配布候補を保留します。
+OS WebView/SDK/Rust/Go toolchain は一般ツール・OS 部品として別途用意し、利用者の秘密値・profile・取得済み runtime を対応 source に含めません。

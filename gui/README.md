@@ -28,3 +28,8 @@ Windows は既存 NSIS、Mac は arch 別 .app/DMG、Ubuntu 24.04 x64 は .deb �
 CI は PR 検証と候補 artifact のみで、Release・署名・自動配布を行いません。
 Windows の native 結合試験は同じ UI/IPC/Go を使う非配布の `native-fixture` build です。昇格した hosted runner では WebView2 の環境変数 override が無視されるため、専用 build だけ API へ CDP/profile を渡します。通常版の DevTools は無効のままで、fixture の target/profile は配布対象から外し、両 packager が `nativeFixture:true` または marker 欠落を拒否します。
 実 Laptop 導入、署名資格情報の準備、OS 権限設定は開発ビルドに含めません。
+
+## 段階公開の対象
+
+現在の配布候補は Windows x64 / Ubuntu 24.04 x64 です。Mac は同じ共通実装の native build/test を維持し、公開候補の梱包/upload を保留します。
+単一 target profile から SDK binding 実装を除いた対応 source を生成し、両 native host で offline 再構築します。詳細は [source distribution](../docs/source-distribution.md) を参照してください。

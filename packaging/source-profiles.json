@@ -1,0 +1,11 @@
+{
+  "windows-linux": {
+    "targets": ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"],
+    "heldTargets": ["x86_64-apple-darwin", "aarch64-apple-darwin"],
+    "excludedBindingNames": ["objc*", "block2", "dispatch2", "core-foundation*", "core-graphics*", "cocoa*", "metal*", "security-framework*", "swift-rs"],
+    "filterer": {
+      "version": "0.5.16",
+      "archiveSHA256": "822b66f0b343c0bfecfc19ffe08fbd2d7558b45981b0927649beb821e907374c"
+    }
+  }
+}

@@ -12,7 +12,41 @@ env:
   CARGO_BUILD_JOBS: '2'
   MACOSX_DEPLOYMENT_TARGET: '13.5'
 jobs:
+  source:
+    name: Windows/Linux corresponding source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Fixed Rust toolchain and ephemeral tool prerequisites
+        run: |
+          rustup toolchain install 1.94.1 --profile minimal
+          rustup override set 1.94.1
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+      - run: python -m unittest discover -s test -p "test_*.py" -v
+      - name: Single target-profile source pipeline (no Apple binding implementation)
+        run: |
+          python scripts/source-vendor.py --install-tool dist/vendor-tool
+          python scripts/package-source.py --profile windows-linux --vendor-filterer "$PWD/dist/vendor-tool/bin/cargo-vendor-filterer" --output dist/source
+      - name: Source candidate for native offline rebuild gates
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: source-windows-linux-${{ github.event.pull_request.head.sha }}
+          path: |
+            dist/source/*.tar.gz
+            dist/source/*.sha256
+          if-no-files-found: error
+          retention-days: 14
   native:
+    needs: source
     name: GUI / ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -36,7 +70,7 @@ jobs:
             target: aarch64-apple-darwin
             suffix: ''
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 60 # Includes a second build from the delivered archive and empty caches.
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -49,6 +83,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
+      - name: Target distribution policy (Mac remains build/test only)
+        id: distribution
+        shell: bash
+        run: python scripts/source_policy.py --target ${{ matrix.target }} --github-output "$GITHUB_OUTPUT"
       - name: Ephemeral Linux build libraries
         if: runner.os == 'Linux'
         run: |
@@ -101,6 +139,7 @@ jobs:
           CARGO_TARGET_DIR="$PWD/gui/src-tauri/target/native-fixture" cargo build --locked --release -j 2 --features native-fixture --manifest-path gui/src-tauri/Cargo.toml
           XPOTATO_PLAYWRIGHT_MODULE="$PWD/.local/gui-tests/node_modules/playwright" node --test test/gui-native.test.cjs
       - name: Native review package with full license text
+        if: steps.distribution.outputs.eligible == 'true'
         shell: bash
         run: |
           python scripts/package-review.py --binary dist/xpotato-tunnel${{ matrix.suffix }} --output dist/core --platform ${{ matrix.platform }}
@@ -121,24 +160,28 @@ jobs:
         run: |
           $info = Get-Content dist/gui/content/build-info.json -Raw | ConvertFrom-Json
           ./test/installer.test.ps1 -InstallerPath "dist/installer/xpotato-tunnel-$($info.version)-windows-amd64-setup.exe" -Version $info.version
-      - name: Corresponding source including locked Rust dependencies
-        if: runner.os == 'Linux'
+      - name: Download the same filtered source archive on both native hosts
+        if: steps.distribution.outputs.eligible == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: source-windows-linux-${{ github.event.pull_request.head.sha }}
+          path: dist/source-download
+      - name: Delivered source rebuild and tests (empty caches, Cargo frozen, Go proxy off)
+        if: steps.distribution.outputs.eligible == 'true'
         shell: bash
         run: |
-          cargo vendor --locked --manifest-path gui/src-tauri/Cargo.toml dist/gui-vendor > dist/vendor-config.txt
-          python scripts/package-source.py --rust-vendor dist/gui-vendor --output dist/source
+          python scripts/check-source-bundle.py --archive "$(echo dist/source-download/*.tar.gz)" --target ${{ matrix.target }} --expected-commit ${{ github.event.pull_request.head.sha }} --output dist/source-rebuild
       - name: Upload candidates for review (no release, signing or deployment)
+        if: steps.distribution.outputs.eligible == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.platform }}-${{ github.event.pull_request.head.sha }}
           path: |
-            dist/gui/*.dmg
             dist/gui/*.deb
             dist/gui/*.sha256
             dist/installer/*-setup.exe
             dist/installer/*.sha256
-            dist/source/*.tar.gz
-            dist/source/*.sha256
+            dist/source-rebuild/build/SOURCE-REBUILD-RESULT.json
             dist/gui-native-ready.png
           if-no-files-found: error
           retention-days: 14

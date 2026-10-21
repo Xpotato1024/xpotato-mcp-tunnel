@@ -6,18 +6,20 @@ import io
 import json
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/'scripts'))
+from source_policy import long_path
 
 def run(*args):
     return subprocess.check_output(args, cwd=ROOT)
 
 def pack(content, archive, epoch):
+    content=long_path(content)
     files = sorted(p for p in content.rglob('*') if p.is_file())
     if any(p.is_symlink() for p in content.rglob('*')):
         raise ValueError('source bundle must contain no symlinks')
@@ -40,8 +42,10 @@ def main():
         raise SystemExit('source packaging requires Python 3.12 or later (safe tar extraction)')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True, type=Path)
-    parser.add_argument('--rust-vendor', type=Path, help='Reviewed cargo vendor output to include with GUI source')
+    parser.add_argument('--profile',default='core',choices=['core',*json.loads((ROOT/'packaging/source-profiles.json').read_text(encoding='utf-8'))])
+    parser.add_argument('--vendor-filterer',type=Path,help='Pinned developer filterer; required for GUI source')
     args = parser.parse_args()
+    if (args.profile!='core')!=bool(args.vendor_filterer):raise ValueError('GUI source requires an explicit profile and pinned filterer')
     if run('git','status','--porcelain','--untracked-files=normal').strip():
         raise ValueError('commit all source changes before packaging')
     commit = run('git','rev-parse','HEAD').decode().strip()
@@ -60,19 +64,24 @@ def main():
             tar.extractall(content,filter='data')
         subprocess.run(['go','mod','verify'],cwd=ROOT,check=True)
         subprocess.run(['go','mod','vendor','-o',str(content/'vendor')],cwd=ROOT,check=True)
-        if args.rust_vendor:
-            rust_vendor=args.rust_vendor.resolve()
-            if not rust_vendor.is_dir() or any(p.is_symlink() for p in rust_vendor.rglob('*')):
-                raise ValueError('expected regular Cargo vendor source tree')
-            shutil.copytree(rust_vendor,content/'gui/vendor')
-            (content/'.cargo').mkdir(exist_ok=True)
-            (content/'.cargo/config.toml').write_text('[source.crates-io]\nreplace-with = "vendored-sources"\n[source.vendored-sources]\ndirectory = "gui/vendor"\n',encoding='utf-8')
+        filtering=None
+        if args.profile!='core':
+            import importlib.util
+            spec=importlib.util.spec_from_file_location('source_vendor',ROOT/'scripts/source-vendor.py')
+            module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+            filtering=module.vendor(content,args.profile,args.vendor_filterer.resolve())
         if run('git','rev-parse','HEAD').decode().strip()!=commit or run('git','status','--porcelain','--untracked-files=normal').strip():
             raise ValueError('source checkout changed while collecting dependencies')
         metadata = dict(commit=commit,version=version,license='AGPL-3.0-only',toolchain=toolchain,
                         sourceDateEpoch=epoch,goDependenciesIncluded=True,runtimeIncluded=False,
                         buildInstructions='docs/licensing.md')
-        metadata['rustDependenciesIncluded']=bool(args.rust_vendor)
+        metadata['rustDependenciesIncluded']=bool(filtering)
+        metadata['sourceProfile']=args.profile
+        if filtering:
+            metadata['targets']=filtering['targets']
+            metadata['heldTargets']=filtering['heldTargets']
+            metadata['cargoLockSHA256']=filtering['lockSHA256']
+            metadata['buildInstructions']='docs/source-distribution.md'
         (content/'SOURCE-PROVENANCE.json').write_text(json.dumps(metadata,indent=2)+'\n',encoding='utf-8',newline='\n')
         archive = output/f'xpotato-tunnel-{version}-source.tar.gz'
         pack(content,archive,epoch)
