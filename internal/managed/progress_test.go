@@ -50,7 +50,7 @@ func TestInventoryProgressContainsCountsWithoutPaths(t *testing.T) {
 		t.Fatal(e)
 	}
 	joined := strings.Join(messages, "\n")
-	if !strings.Contains(joined, "1 files / 7 bytes") || strings.Contains(joined, "private-fixture-name") || strings.Contains(joined, root) {
+	if !strings.Contains(joined, "files 1; bytes 7 (totals unknown)") || strings.Contains(joined, "private-fixture-name") || strings.Contains(joined, root) {
 		t.Fatal("unhelpful or unsafe progress", joined)
 	}
 }

@@ -1,5 +1,7 @@
 # 配布候補と版付きRelease
 
+> 次版候補: [Installer 設計と公開前の検証](installer-lifecycle.md)。公開済み v0.2.10 の asset/tag は変更しません。
+
 この手順は管理者向けです。利用者は[quickstart](quickstart.md)へ進みます。正式配布は[Release v0.2.10](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.10)です。CIは候補を作るだけで、push/PRからRelease、tag、deployを行いません。公開は本人の明示承認後に管理者が手動で行います。
 
 v0.2.9は起動ログ設定を修正した新しい版です。生成名はコアの版から決まり、既存v0.2.8のtag/assetsは変更しません。以後の公開にも採用mainの再検証と、新版tag・Releaseへの本人の明示承認が必要です。

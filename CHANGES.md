@@ -1,3 +1,16 @@
+# 0.2.11 Draft — 2026-10-21
+
+- Keep the Tunnel core in Go; add a thin per-user NSIS installer candidate and
+  a shared maintenance menu. No merge, release or target-device installation.
+- Normal new install, update, repair and start check only bounded launch files.
+  Archive hashes are streamed during acquisition; full expanded-tree comparison
+  is explicit `doctor --deep`. This does not guarantee every stored transitive
+  dependency remains unchanged between diagnostics.
+- Repair creates a new generation without replacing any running generation.
+  Separate file/byte progress and report interruption/timeout/failure clearly.
+- Group packaged user docs and legal notices without losing source offers.
+- Build/test/CI and installer smoke validation are pending the measurement hold.
+
 # 0.2.10 candidate — 2026-10-20
 
 Project attribution and maintenance: **Xpotato.net / Xpotato1024**.

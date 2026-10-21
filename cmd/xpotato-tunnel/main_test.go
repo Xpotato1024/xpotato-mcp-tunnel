@@ -13,6 +13,19 @@ func TestDoctorDoesNotRequireDefaultDevice(t *testing.T) {
 	}
 }
 
+func TestDeepDiagnosisIsExplicitAndDeviceScoped(t *testing.T) {
+	home := t.TempDir()
+	for _, command := range []string{"setup", "update", "repair", "maintenance", "start"} {
+		if _, _, err := parse([]string{command, "--home", home, "--device", "fixture", "--deep"}); err == nil {
+			t.Fatal("deep diagnosis accepted by normal path", command)
+		}
+	}
+	command, o, err := parse([]string{"doctor", "--home", home, "--device", "fixture", "--deep"})
+	if err != nil || command != "doctor" || !o.Deep {
+		t.Fatal(command, o, err)
+	}
+}
+
 func TestKeyCannotBePassedAsCLIOption(t *testing.T) {
 	if _, _, e := parse([]string{"setup", "--api-key", "synthetic"}); e == nil {
 		t.Fatal("key accepted as argument")

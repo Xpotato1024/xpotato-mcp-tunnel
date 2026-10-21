@@ -115,6 +115,47 @@ func TestCoreChangesAfterPreparationAreRejectedBeforeActivation(t *testing.T) {
 	}
 }
 
+func TestDispatcherRefreshPreservesDeviceFallbackAndResumes(t *testing.T) {
+	home, record := legacyCommandFixture(t)
+	source, _ := os.Executable()
+	old := core.CorePin{Version: record.Version}
+	old.SHA256, _ = hashFile(corePath(home, old))
+	record.Launcher, record.Fallback, record.Installer = &old, &old, &old
+	record.Files = map[string]string{}
+	for name, data := range stableShimFiles(home, corePath(home, old), filepath.Join(home, "bin")) {
+		atomicBytes(name, data)
+		record.Files[name] = hashBytes(data)
+	}
+	saveCommandRecord(filepath.Join(home, "command-install.json"), record)
+	p, err := prepareCommandUpdate(context.Background(), home, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *p.record.Launcher != p.current || *p.record.Fallback != old {
+		t.Fatal("dispatcher rotation changed fallback")
+	}
+	// Simulate interruption after the record, before any wrapper is replaced.
+	if err = saveCommandRecord(filepath.Join(home, "command-install.json"), p.record); err != nil {
+		t.Fatal(err)
+	}
+	p.Close()
+	p, err = prepareCommandUpdate(context.Background(), home, source)
+	if err != nil {
+		t.Fatal("old wrappers could not resume", err)
+	}
+	defer p.Close()
+	if err = p.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if err = p.Verify(); err != nil {
+		t.Fatal(err)
+	}
+	target, err := DispatchTarget(context.Background(), home, "")
+	if err != nil || target != corePath(home, old) {
+		t.Fatal("device fallback changed", err)
+	}
+}
+
 func legacyCommandFixture(t *testing.T) (string, commandRecord) {
 	t.Helper()
 	home := t.TempDir()

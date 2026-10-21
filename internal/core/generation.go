@@ -30,7 +30,9 @@ type CommandUpdate interface {
 }
 
 // PreparedRuntime owns the installation lock and only its own temporary stage.
-// Verify performs a full inventory/hash check immediately before publication.
+// Verify performs a bounded launch/configuration check before publication.
+// Archive/lock integrity is checked while acquiring dependencies. A complete
+// expanded-tree scan is reserved for an explicitly requested deep diagnosis.
 // A returned id is never a persisted "verified" cache flag.
 type PreparedRuntime interface {
 	Verify() (string, error)

@@ -42,7 +42,11 @@ stderrは1行4KiB、各queueは書込み中を含め64KiBです。長い行や�
 
 ## doctorと保存先
 
-`doctor`は保存先とinstall lock、`doctor --device 端末名`はその設定・runtime/lock整合性を読み取ります。runtime検証はreceiptと全ファイルのhash・固定版の照合で、起動引数を実行する設定検証ではありません。資格情報の値、実接続、アカウント登録も検査しません。成功だけで起動設定の受理・オンライン/MCP成功とは判定しません。
+次版 0.2.11 Draft: `doctor` は既定 device があればその device、なければ保存先と install lock を確認します。`doctor --device NAME` は対象を指定します。通常は起動入口7ファイルと構成だけを確認し、JSON の `verificationScope` は `launch-files-only` です。保存後の全依存の変更を検出する保証ではありません。
+
+全件比較は明示的 `doctor --deep`（必要なら `--device NAME`）だけです。旧 receipt は全件記録、新 receipt は固定取得元から一時 reference を取得・展開して比較します。通信と重い走査を伴う場合があり、上限10分で中断・失敗は非ゼロです。深い診断でも起動入口と receipt の整合性を先に確認します。修復は `repair` で新しい世代を取得し、既存世代や既存プロセスは変更しません。[設計と検証状況](installer-lifecycle.md) を参照してください。
+
+いずれの doctor も資格情報の値、実接続、アカウント登録は調べません。正常終了をオンライン/MCP成功の確認とは扱いません。公開済み v0.2.10 は従来どおり全ファイル hash を検査するため、この Draft の通常検査とは異なります。
 
 恒久homeにはcore、releases、devices、command-install metadataとロック、キーはOS保管庫にあります。配布フォルダーと恒久homeは別です。通常のupdateは旧core/runtimeや設定を削除しません。候補0.2.10のrollbackは保存済みcore/runtimeを組で戻し、現管理coreが全検証できる互換runtimeに限ります。[世代切替と再開の詳細](update-transactions.md)を参照してください。
 

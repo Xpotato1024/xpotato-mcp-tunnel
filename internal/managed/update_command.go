@@ -137,6 +137,7 @@ func prepareCommandUpdateSelection(ctx context.Context, home, source string, sel
 		return fail(e)
 	}
 	p.current = pin
+	refreshLauncher := false
 	if r.Launcher == nil {
 		legacy := core.CorePin{Version: r.Version}
 		if !coreVersionForPath(legacy.Version) {
@@ -159,6 +160,13 @@ func prepareCommandUpdateSelection(ctx context.Context, home, source string, sel
 		if e = VerifyCore(ctx, home, *r.Fallback); e != nil {
 			return fail(e)
 		}
+		if *r.Launcher != pin {
+			// A previous launcher cannot parse newly added management commands.
+			// Rotate only the dispatcher; each device still selects its own core.
+			// Keep PreviousFiles across retries after the new record is published.
+			refreshLauncher = true
+			r.Launcher = &pin
+		}
 	}
 	p.legacy = *r.Fallback
 	files := stableShimFiles(home, corePath(home, *r.Launcher), filepath.Join(home, "bin"))
@@ -167,6 +175,7 @@ func prepareCommandUpdateSelection(ctx context.Context, home, source string, sel
 			files[path] = b
 		}
 	}
+	previousFiles := map[string]string{}
 	for path, b := range files {
 		old, err := commandFileBytes(path)
 		if err != nil && !os.IsNotExist(err) {
@@ -177,7 +186,11 @@ func prepareCommandUpdateSelection(ctx context.Context, home, source string, sel
 			if h != r.Files[path] && h != r.PreviousFiles[path] && h != hashBytes(b) {
 				return fail(errors.New("existing command file was modified; preserved"))
 			}
+			previousFiles[path] = h
 		}
+	}
+	if refreshLauncher {
+		r.PreviousFiles = previousFiles
 	}
 	r.Files = map[string]string{}
 	for path, b := range files {
@@ -323,8 +336,8 @@ func stableShimFiles(home, dest, dir string) map[string][]byte {
 }
 
 // DispatchTarget reads only owner-checked nonsecret metadata and hashes the
-// selected core. The selected core still validates device/scope and all runtime
-// files before loading credentials. It never discovers or executes PATH tools.
+// selected core. The selected core still validates device/scope and bounded
+// runtime launch files before loading credentials. It never executes PATH tools.
 func DispatchTarget(ctx context.Context, home, device string) (string, error) {
 	r, e := readCommandRecord(home)
 	if e != nil {

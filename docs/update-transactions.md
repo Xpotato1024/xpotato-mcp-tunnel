@@ -1,5 +1,7 @@
 # 0.2.10の更新処理
 
+> 次版候補の通常検査は起動入口のみです。全件診断は明示的 `doctor --deep`、修復は新しい世代を作る `repair` へ分離します。[設計](installer-lifecycle.md) を参照してください。
+
 0.2.10は更新時の検証重複を減らし、core/runtimeの切替と取消・再開を改善します。配布物の取得・検証は[quickstart](quickstart.md)、管理側の公開手順は[distribution](distribution.md)を参照してください。実端末への導入とWindows検出内容の確認は別の作業です。同版異bytesを避けるため、0.2.9からコア版を進めています。
 
 ## 準備と切替
