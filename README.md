@@ -8,12 +8,12 @@ Windows x64 / Ubuntu 24.04 desktop x64 で、端末内の Desktop Commander を 
 
 ## 使い始める・更新する
 
-[v0.2.11 Release](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.11) から OS 用の導入ファイルを取得します。公開前のリンクは利用できません。Actions の期限付き artifact は開発・レビュー用です。
+[v0.2.12 Release](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/tag/v0.2.12) から OS 用の導入ファイルを取得します。公開前のリンクは利用できません。Actions の期限付き artifact は開発・レビュー用です。
 
 | 環境 | 通常導入の入口 |
 | --- | --- |
-| Windows x64 | [xpotato-tunnel-0.2.11-windows-amd64-setup.exe](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/xpotato-tunnel-0.2.11-windows-amd64-setup.exe) |
-| Ubuntu 24.04 desktop x64 | [xpotato-tunnel-0.2.11-linux-amd64.deb](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/xpotato-tunnel-0.2.11-linux-amd64.deb) |
+| Windows x64 | [xpotato-tunnel-0.2.12-windows-amd64-setup.exe](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.12/xpotato-tunnel-0.2.12-windows-amd64-setup.exe) |
+| Ubuntu 24.04 desktop x64 | [xpotato-tunnel-0.2.12-linux-amd64.deb](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.12/xpotato-tunnel-0.2.12-linux-amd64.deb) |
 
 詳しい [導入・更新・修復・削除](docs/gui-lifecycle.md) を参照してください。Windows の Installer は英語画面、導入後のアプリは日本語です。Windows は既存の WebView2 Evergreen、Ubuntu は WebKitGTK 4.1 とユーザーの Secret Service が前提です。Windows 候補は未署名で、発行者署名はありません。
 
@@ -26,7 +26,7 @@ Go/Rust/Node/npm の事前導入は不要です。初回設定・runtime 再取�
 
 アプリ本体の入れ替えは次版の Installer／deb、runtime の適用は「この版で更新」で行います。バックグラウンドの自動更新・既存プロセスの強制停止・OS権限やサービス設定の変更は行いません。削除後もプロファイル・保存済みキー・runtime は保持します。
 
-[対応ソース](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/xpotato-tunnel-0.2.11-source.tar.gz) は開発者向けです。[source の対象と再構築](docs/source-distribution.md)、[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/SHA256SUMS.txt) と [公開物の出自](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.11/release-provenance.json) を別途提供します。GitHub の自動生成 Source code archive は依存を含む対応ソースの代わりではありません。
+[対応ソース](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.12/xpotato-tunnel-0.2.12-source.tar.gz) は開発者向けです。[source の対象と再構築](docs/source-distribution.md)、[checksum](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.12/SHA256SUMS.txt) と [公開物の出自](https://github.com/Xpotato1024/xpotato-mcp-tunnel/releases/download/v0.2.12/release-provenance.json) を別途提供します。GitHub の自動生成 Source code archive は依存を含む対応ソースの代わりではありません。
 
 [v0.2.10 portable 手順](docs/quickstart.md) は同版の履歴として保持します。旧版のtag/assetは上書きしません。旧v0.2.8のログ設定エラーは [運用ガイド](docs/operations.md#v028のログ設定エラー) を参照してください。
 
